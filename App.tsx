@@ -15,7 +15,7 @@ import {
   LogOut,
   LogIn
 } from 'lucide-react';
-import ContainerCard from './components/ContainerCard';
+import ContainerCard from './ContainerCard';
 import RegisterModal from './components/RegisterModal';
 import CreateModal from './components/CreateModal';
 import PasswordModal from './components/PasswordModal';
