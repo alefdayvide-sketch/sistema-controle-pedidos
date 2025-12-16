@@ -16,10 +16,10 @@ import {
   LogIn,
   Info
 } from 'lucide-react';
-import ContainerCard from './components/ContainerCard';
-import RegisterModal from './components/RegisterModal';
-import CreateModal from './components/CreateModal';
-import PasswordModal from './components/PasswordModal';
+import ContainerCard from './ContainerCard';
+import RegisterModal from './RegisterModal';
+import CreateModal from './CreateModal';
+import PasswordModal from './PasswordModal';
 import { Container, RawApiContainer, ShipmentFormData, CreateFormData } from './types';
 import { API_URL } from './constants';
 
