@@ -13,23 +13,33 @@ import {
   Calendar,
   CheckCircle2,
   LogOut,
-  LogIn
+  LogIn,
+  Info
 } from 'lucide-react';
-import ContainerCard from './ContainerCard';
-import RegisterModal from './RegisterModal';
-import CreateModal from './CreateModal';
-import PasswordModal from './PasswordModal';
+import ContainerCard from './components/ContainerCard';
+import RegisterModal from './components/RegisterModal';
+import CreateModal from './components/CreateModal';
+import PasswordModal from './components/PasswordModal';
 import { Container, RawApiContainer, ShipmentFormData, CreateFormData } from './types';
 import { API_URL } from './constants';
 
 const DRIVE_FILE_ID = "15ubzgKAvMV1hz-4PjWzfxi_iQmUVHPzU";
 const LOGO_URL = `https://lh3.googleusercontent.com/d/${DRIVE_FILE_ID}`;
 
+// Helper para normalizar IDs (remove TODOS os espaços e força uppercase)
+const normalizeId = (id: any): string => {
+  if (!id) return '';
+  return String(id).replace(/\s+/g, '').toUpperCase();
+};
+
 const App: React.FC = () => {
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Notification State
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
+
   const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => {
     return (localStorage.getItem('viewMode') as 'director' | 'admin') || 'director';
   });
@@ -46,6 +56,11 @@ const App: React.FC = () => {
     localStorage.setItem('viewMode', viewMode);
   }, [viewMode]);
 
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -60,7 +75,6 @@ const App: React.FC = () => {
       }
 
       // SOFT DELETE FILTER: 
-      // Ignora qualquer registro que o Google Apps Script tenha marcado como "Excluído"
       const activeData = data.filter(item => (item['Status'] || "") !== "Excluído");
 
       const mappedData = activeData.map((item): Container => {
@@ -85,9 +99,13 @@ const App: React.FC = () => {
 
         const rawInicio = item['Data Inicio'] || item['Data Início'] || '';
         const rawFim = item['Data Fim'] || '';
-        const robustId = item['Id'] || item['id'] || `TEMP-${Math.random().toString(36).substr(2,9)}`;
+        
+        // FIX: Normalização no carregamento
+        const rawId = item['Id'] || item['id'];
+        const robustId = rawId ? normalizeId(rawId) : `TEMP-${Math.random().toString(36).substr(2,9)}`;
 
         return {
+          ...item,
           id: robustId,
           supplier: item['Fornecedor'],
           status: status,
@@ -100,7 +118,6 @@ const App: React.FC = () => {
           date_start: rawInicio,
           date_end: rawFim,
           items: itemsList, 
-          ...item 
         };
       });
 
@@ -149,10 +166,8 @@ const App: React.FC = () => {
   // --- SECURITY & MODE SWITCHING ---
   const handleSwitchModeClick = () => {
     if (viewMode === 'admin') {
-      // Se é admin, sai diretamente
       setViewMode('director');
     } else {
-      // Se é director, abre modal de senha
       setIsPasswordModalOpen(true);
     }
   };
@@ -161,22 +176,23 @@ const App: React.FC = () => {
     setViewMode('admin');
   };
 
-  // --- DELETE FUNCTION: LÓGICA RÍGIDA DE SOFT DELETE ---
+  // --- DELETE FUNCTION ---
   const handleDeleteContainer = async (id: string) => {
-    const cleanId = String(id ?? "").trim();
+    const cleanId = normalizeId(id);
 
     if (!cleanId) {
-      alert("Erro: ID inválido para exclusão.");
+      showToast("Erro: ID inválido.", "error");
       return;
     }
 
-    // Confirmação do usuário
-    if (!window.confirm(`ATENÇÃO: Deseja realmente excluir o container ${cleanId}?\nEsta ação moverá o status para 'Excluído'.`)) {
+    if (!window.confirm(`ATENÇÃO: Deseja excluir ${cleanId}?`)) {
       return;
     }
+
+    setContainers(prev => prev.filter(c => normalizeId(c.id) !== cleanId));
+    showToast("Container excluído (Otimista)", "info");
 
     try {
-      // FIX CRÍTICO: headers 'text/plain' evita Preflight CORS do Google Apps Script
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -185,59 +201,89 @@ const App: React.FC = () => {
 
       const result = await response.json();
 
-      // Validação estrita da resposta
       if (result?.result !== "success") {
-        alert(`Não foi possível excluir.\nMotivo: ${result?.message || result?.error || "erro desconhecido"}`);
-        await fetchData(); // Recarrega para garantir consistência
+        showToast(`Erro ao excluir: ${result?.message || "Desconhecido"}`, "error");
+        await fetchData(); 
         return;
       }
-
-      // Sucesso: Recarrega a lista. Como o status agora é "Excluído", o filtro do fetchData fará o card sumir.
-      await fetchData();
+      showToast("Exclusão confirmada pelo servidor.", "success");
 
     } catch (err) {
       console.error(err);
-      alert("Erro de conexão ao excluir. Recarregando dados.");
+      showToast("Erro de conexão ao excluir.", "error");
       await fetchData();
     }
   };
 
   const handleReceiveContainer = async (id: string) => {
-      const cleanId = String(id ?? "").trim();
-      
-      if (!window.confirm(`Confirmar recebimento do container ${cleanId} no pátio?`)) {
+      const cleanId = normalizeId(id);
+      console.log(`[App] Recebendo Container: "${cleanId}"`);
+
+      // 1. Verificação SÍNCRONA
+      const targetExists = containers.some(c => normalizeId(c.id) === cleanId);
+      if (!targetExists) {
+          showToast(`Erro Interno: ID "${cleanId}" não encontrado.`, "error");
+          console.error("ID não encontrado na lista:", containers.map(c => c.id));
           return;
       }
 
-      setLoading(true);
+      // 2. ATUALIZAÇÃO OTIMISTA
+      setContainers(prevContainers => 
+        prevContainers.map(container => 
+            normalizeId(container.id) === cleanId
+            ? { ...container, status: 'yard' }
+            : container
+        )
+      );
+      
+      showToast(`Recebendo container ${cleanId}...`, "info");
+
+      // 3. ENVIO PARA API
       try {
+          const todayISO = new Date().toISOString().split('T')[0];
+          
           const response = await fetch(API_URL, {
               method: "POST",
               headers: { "Content-Type": "text/plain;charset=utf-8" },
-              body: JSON.stringify({ action: "receive", id: cleanId })
+              body: JSON.stringify({ 
+                  action: "update",  // ALTERADO DE "receive" PARA "update"
+                  id: cleanId,
+                  data_chegada: todayISO,
+                  status: "Entregue" // ENVIA O NOVO STATUS EXPLICITAMENTE
+              })
           });
 
-          const result = await response.json();
+          // Handle non-JSON responses (e.g. Google Error pages)
+          const text = await response.text();
+          let result;
+          try {
+            result = JSON.parse(text);
+          } catch (e) {
+            console.error("Non-JSON Response:", text);
+            throw new Error("Resposta inválida do servidor.");
+          }
 
           if (result?.result !== "success" && result?.result !== "updated") {
-              // Fallback: Se o backend não suportar 'receive', tentamos entender o erro, mas exibimos msg
-              alert(`Atenção: O sistema respondeu: ${result?.message || "Erro desconhecido"}`);
+              console.error("Erro backend:", result);
+              showToast(`Erro servidor: ${result?.message || "Falha"}`, "error");
+              await fetchData(); // Reverte
+          } else {
+             showToast("Recebimento confirmado!", "success");
           }
           
-          await fetchData();
       } catch (err) {
-          console.error(err);
-          alert("Erro de conexão ao receber carga.");
-      } finally {
-          setLoading(false);
+          console.error("Erro Conexão:", err);
+          showToast(`Erro conexão: ${err instanceof Error ? err.message : String(err)}`, "error");
+          await fetchData(); // Reverte
       }
   };
 
   const handleSaveShipment = async (id: string, formData: ShipmentFormData) => {
     setIsSaving(true);
-    const currentContainer = containers.find(c => c.id === id);
+    const cleanId = normalizeId(id);
+    const currentContainer = containers.find(c => normalizeId(c.id) === cleanId);
+    
     const actionType = currentContainer?.status === 'transit' ? 'edit' : 'update';
-    const cleanId = String(id).trim();
 
     const payload = {
       action: actionType,
@@ -262,10 +308,11 @@ const App: React.FC = () => {
         throw new Error(result.error || result.message || "Erro ao salvar");
       }
       
+      showToast("Dados salvos com sucesso!", "success");
       await fetchData();
       setIsModalOpen(false);
     } catch (err) {
-      alert(`Erro: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(`Erro ao salvar: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -304,15 +351,15 @@ const App: React.FC = () => {
 
       const result = await response.json();
       
-      // FIX: Aceitar tanto "created" quanto "success" como retorno válido
       if (result.result !== "created" && result.result !== "success") {
         throw new Error(result.error || result.message || "Erro ao criar");
       }
 
+      showToast("Programação criada!", "success");
       await fetchData();
-      setIsCreateModalOpen(false); // Fecha o modal com sucesso
+      setIsCreateModalOpen(false); 
     } catch (err) {
-      alert(`Erro: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(`Erro: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -399,11 +446,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden relative">
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
       `}</style>
+
+      {/* Toast Notification System */}
+      {notification && (
+        <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-300 border
+          ${notification.type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400' : ''}
+          ${notification.type === 'error' ? 'bg-rose-500/90 text-white border-rose-400' : ''}
+          ${notification.type === 'info' ? 'bg-slate-800/90 text-cyan-400 border-cyan-500/30' : ''}
+        `}>
+          {notification.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
+          {notification.type === 'error' && <AlertOctagon className="w-5 h-5" />}
+          {notification.type === 'info' && <Info className="w-5 h-5" />}
+          <span className="text-sm font-bold">{notification.message}</span>
+        </div>
+      )}
 
       <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl shadow-black/40">
         <div className="flex items-center gap-3">
