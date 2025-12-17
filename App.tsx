@@ -16,17 +16,16 @@ import {
   LogIn,
   Info
 } from 'lucide-react';
-import ContainerCard from './ContainerCard';
-import RegisterModal from './RegisterModal';
-import CreateModal from './CreateModal';
-import PasswordModal from './PasswordModal';
+import ContainerCard from './components/ContainerCard';
+import RegisterModal from './components/RegisterModal';
+import CreateModal from './components/CreateModal';
+import PasswordModal from './components/PasswordModal';
 import { Container, RawApiContainer, ShipmentFormData, CreateFormData } from './types';
 import { API_URL } from './constants';
 
 const DRIVE_FILE_ID = "15ubzgKAvMV1hz-4PjWzfxi_iQmUVHPzU";
 const LOGO_URL = `https://lh3.googleusercontent.com/d/${DRIVE_FILE_ID}`;
 
-// Helper para normalizar IDs (remove TODOS os espaços e força uppercase)
 const normalizeId = (id: any): string => {
   if (!id) return '';
   return String(id).replace(/\s+/g, '').toUpperCase();
@@ -36,8 +35,6 @@ const App: React.FC = () => {
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Notification State
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
   const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => {
@@ -45,8 +42,8 @@ const App: React.FC = () => {
   });
 
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
-  
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'shipment' | 'receive'>('shipment');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
@@ -69,17 +66,14 @@ const App: React.FC = () => {
       const data: RawApiContainer[] = await response.json();
       
       if (!Array.isArray(data)) {
-        console.error("API returned invalid format:", data);
         setContainers([]); 
         return;
       }
 
-      // SOFT DELETE FILTER: 
       const activeData = data.filter(item => (item['Status'] || "") !== "Excluído");
 
       const mappedData = activeData.map((item): Container => {
         const rawStatus = item['Status'] || "";
-        
         let status: Container['status'] = 'planning';
         
         if (rawStatus === "Em Trânsito") status = 'transit';
@@ -87,7 +81,6 @@ const App: React.FC = () => {
         else status = 'planning'; 
 
         const itemsList = [];
-        
         if (item['Item 1 Desc']) itemsList.push({ desc: item['Item 1 Desc'], qtd: item['Item 1 Qtd'] || '', real: item['Item 1 Real'] || '' });
         if (item['Item 2 Desc']) itemsList.push({ desc: item['Item 2 Desc'], qtd: item['Item 2 Qtd'] || '', real: item['Item 2 Real'] || '' });
         if (item['Item 3 Desc']) itemsList.push({ desc: item['Item 3 Desc'], qtd: item['Item 3 Qtd'] || '', real: item['Item 3 Real'] || '' });
@@ -99,8 +92,6 @@ const App: React.FC = () => {
 
         const rawInicio = item['Data Inicio'] || item['Data Início'] || '';
         const rawFim = item['Data Fim'] || '';
-        
-        // FIX: Normalização no carregamento
         const rawId = item['Id'] || item['id'];
         const robustId = rawId ? normalizeId(rawId) : `TEMP-${Math.random().toString(36).substr(2,9)}`;
 
@@ -123,8 +114,7 @@ const App: React.FC = () => {
 
       setContainers(mappedData);
     } catch (err) {
-      console.error(err);
-      setError("Falha ao carregar dados do sistema. Verifique sua conexão.");
+      setError("Falha ao carregar dados. Verifique sua conexão.");
       setContainers([]); 
     } finally {
       setLoading(false);
@@ -134,17 +124,6 @@ const App: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
-
-  const stats = useMemo(() => {
-    const safeContainers = Array.isArray(containers) ? containers : [];
-    return {
-      planning: safeContainers.filter(c => c.status === 'planning').length,
-      transit: safeContainers.filter(c => c.status === 'transit').length,
-      divergences: safeContainers.filter(c => 
-        c.items && c.items.some(i => i.real && i.real !== i.desc)
-      ).length
-    };
-  }, [containers]);
 
   const suppliers = useMemo(() => {
     const safeContainers = Array.isArray(containers) ? containers : [];
@@ -157,144 +136,93 @@ const App: React.FC = () => {
     return safeContainers.filter(c => c.supplier === supplierFilter);
   }, [containers, supplierFilter]);
 
-
   const handleOpenRegister = (id: string) => {
     setSelectedContainerId(id);
+    setModalMode('shipment');
     setIsModalOpen(true);
   };
 
-  // --- SECURITY & MODE SWITCHING ---
+  const handleOpenReceive = (id: string) => {
+    setSelectedContainerId(id);
+    setModalMode('receive');
+    setIsModalOpen(true);
+  };
+
   const handleSwitchModeClick = () => {
-    if (viewMode === 'admin') {
-      setViewMode('director');
-    } else {
-      setIsPasswordModalOpen(true);
-    }
+    if (viewMode === 'admin') setViewMode('director');
+    else setIsPasswordModalOpen(true);
   };
 
-  const handleAdminSuccess = () => {
-    setViewMode('admin');
-  };
-
-  // --- DELETE FUNCTION ---
   const handleDeleteContainer = async (id: string) => {
     const cleanId = normalizeId(id);
-
-    if (!cleanId) {
-      showToast("Erro: ID inválido.", "error");
-      return;
-    }
-
-    if (!window.confirm(`ATENÇÃO: Deseja excluir ${cleanId}?`)) {
-      return;
-    }
+    if (!cleanId || !window.confirm(`ATENÇÃO: Deseja excluir ${cleanId}?`)) return;
 
     setContainers(prev => prev.filter(c => normalizeId(c.id) !== cleanId));
-    showToast("Container excluído (Otimista)", "info");
+    showToast("Excluindo...", "info");
 
     try {
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "delete", id: cleanId })
+        body: JSON.stringify({ action: "delete", id: cleanId, "Status": "Excluído" })
       });
-
       const result = await response.json();
-
-      if (result?.result !== "success") {
-        showToast(`Erro ao excluir: ${result?.message || "Desconhecido"}`, "error");
-        await fetchData(); 
-        return;
+      if (result?.result === "success") {
+        showToast("Excluído!", "success");
+      } else {
+        fetchData();
       }
-      showToast("Exclusão confirmada pelo servidor.", "success");
-
     } catch (err) {
-      console.error(err);
-      showToast("Erro de conexão ao excluir.", "error");
-      await fetchData();
+      fetchData();
     }
   };
 
-  const handleReceiveContainer = async (id: string) => {
-      const cleanId = normalizeId(id);
-      console.log(`[App] Recebendo Container: "${cleanId}"`);
-
-      // 1. Verificação SÍNCRONA
-      const targetExists = containers.some(c => normalizeId(c.id) === cleanId);
-      if (!targetExists) {
-          showToast(`Erro Interno: ID "${cleanId}" não encontrado.`, "error");
-          console.error("ID não encontrado na lista:", containers.map(c => c.id));
-          return;
-      }
-
-      // 2. ATUALIZAÇÃO OTIMISTA
-      setContainers(prevContainers => 
-        prevContainers.map(container => 
-            normalizeId(container.id) === cleanId
-            ? { ...container, status: 'yard' }
-            : container
-        )
-      );
-      
-      showToast(`Recebendo container ${cleanId}...`, "info");
-
-      // 3. ENVIO PARA API
-      try {
-          const todayISO = new Date().toISOString().split('T')[0];
-          
-          const response = await fetch(API_URL, {
-              method: "POST",
-              headers: { "Content-Type": "text/plain;charset=utf-8" },
-              body: JSON.stringify({ 
-                  action: "update",  // ALTERADO DE "receive" PARA "update"
-                  id: cleanId,
-                  data_chegada: todayISO,
-                  status: "Entregue" // ENVIA O NOVO STATUS EXPLICITAMENTE
-              })
-          });
-
-          // Handle non-JSON responses (e.g. Google Error pages)
-          const text = await response.text();
-          let result;
-          try {
-            result = JSON.parse(text);
-          } catch (e) {
-            console.error("Non-JSON Response:", text);
-            throw new Error("Resposta inválida do servidor.");
-          }
-
-          if (result?.result !== "success" && result?.result !== "updated") {
-              console.error("Erro backend:", result);
-              showToast(`Erro servidor: ${result?.message || "Falha"}`, "error");
-              await fetchData(); // Reverte
-          } else {
-             showToast("Recebimento confirmado!", "success");
-          }
-          
-      } catch (err) {
-          console.error("Erro Conexão:", err);
-          showToast(`Erro conexão: ${err instanceof Error ? err.message : String(err)}`, "error");
-          await fetchData(); // Reverte
-      }
-  };
-
-  const handleSaveShipment = async (id: string, formData: ShipmentFormData) => {
+  const handleSaveModalData = async (id: string, formData: ShipmentFormData, isReceive: boolean) => {
     setIsSaving(true);
     const cleanId = normalizeId(id);
-    const currentContainer = containers.find(c => normalizeId(c.id) === cleanId);
+    const targetStatus = isReceive ? "Entregue" : "Em Trânsito";
     
-    const actionType = currentContainer?.status === 'transit' ? 'edit' : 'update';
+    // ATUALIZAÇÃO OTIMISTA
+    setContainers(prev => prev.map(c => {
+        if (normalizeId(c.id) === cleanId) {
+            return {
+                ...c,
+                status: isReceive ? 'yard' : 'transit',
+                nf: formData.nf,
+                date_pickup: formData.date_pickup,
+                date_arrival_forecast: formData.date_arrival,
+                items: c.items.map((item, idx) => ({
+                    ...item,
+                    real: formData.items_actual[idx] || item.real
+                }))
+            };
+        }
+        return c;
+    }));
+    
+    setIsModalOpen(false);
+    showToast("Salvando alterações...", "info");
 
+    // PAYLOAD COM MÁXIMA REDUNDÂNCIA DE CABEÇALHOS
     const payload = {
-      action: actionType,
+      action: "update",
       id: cleanId,
-      nf: formData.nf,
-      data_coleta: formData.date_pickup,
-      data_chegada: formData.date_arrival,
-      item1_real: formData.items_actual[0] || '',
-      item2_real: formData.items_actual[1] || '',
-      item3_real: formData.items_actual[2] || ''
+      "Nf": formData.nf,
+      "Data Coleta": formData.date_pickup,
+      "Data Chegada": formData.date_arrival, 
+      
+      // Chaves redundantes para o Status
+      "Status": targetStatus,
+      "Status ": targetStatus, // com espaço caso tenha erro no cabeçalho
+      "status": targetStatus,
+      "Situação": targetStatus,
+      
+      "Item 1 Real": formData.items_actual[0] || '',
+      "Item 2 Real": formData.items_actual[1] || '',
+      "Item 3 Real": formData.items_actual[2] || ''
     };
+
+    console.log("Enviando Payload para API:", payload);
 
     try {
       const response = await fetch(API_URL, {
@@ -305,14 +233,19 @@ const App: React.FC = () => {
       
       const result = await response.json();
       if (result.result !== "updated" && result.result !== "edit" && result.result !== "success") {
-        throw new Error(result.error || result.message || "Erro ao salvar");
+        throw new Error(result.error || result.message || "Erro no servidor");
       }
       
-      showToast("Dados salvos com sucesso!", "success");
-      await fetchData();
-      setIsModalOpen(false);
+      showToast(isReceive ? "Entregue com sucesso!" : "Embarque registrado!", "success");
+      
+      // AGUARDA 1.5 SEGUNDOS PARA GARANTIR QUE O GOOGLE SHEETS PROCESSOU
+      setTimeout(() => {
+        fetchData();
+      }, 1500);
+
     } catch (err) {
-      showToast(`Erro ao salvar: ${err instanceof Error ? err.message : String(err)}`, "error");
+      showToast(`Erro ao sincronizar. Tente atualizar.`, "error");
+      setTimeout(fetchData, 2000); // Tenta recuperar dados originais em caso de falha
     } finally {
       setIsSaving(false);
     }
@@ -325,21 +258,23 @@ const App: React.FC = () => {
 
     const payload = {
       action: "create",
+      "Id": data.id,
+      "Fornecedor": data.fornecedor,
+      "Data Inicio": data.data_inicio,
+      "Data Fim": data.data_fim,
+      "Total M3": totalM3.toFixed(2),
+      "Status": "Planejamento",
+      "Item 1 Desc": data.items[0]?.desc || '',
+      "Item 1 Qtd": data.items[0]?.qtd || '',
+      "Item 1 M3": data.items[0]?.m3 || '',
+      "Item 2 Desc": data.items[1]?.desc || '',
+      "Item 2 Qtd": data.items[1]?.qtd || '',
+      "Item 2 M3": data.items[1]?.m3 || '',
+      "Item 3 Desc": data.items[2]?.desc || '',
+      "Item 3 Qtd": data.items[2]?.qtd || '',
+      "Item 3 M3": data.items[2]?.m3 || '',
       id: data.id,
-      fornecedor: data.fornecedor,
-      data_inicio: data.data_inicio,
-      data_fim: data.data_fim,
-      data_chegada: "", 
-      total_m3: totalM3.toFixed(2),
-      item1_desc: data.items[0]?.desc || '',
-      item1_qtd: data.items[0]?.qtd || '',
-      item1_m3: data.items[0]?.m3 || '',
-      item2_desc: data.items[1]?.desc || '',
-      item2_qtd: data.items[1]?.qtd || '',
-      item2_m3: data.items[1]?.m3 || '',
-      item3_desc: data.items[2]?.desc || '',
-      item3_qtd: data.items[2]?.qtd || '',
-      item3_m3: data.items[2]?.m3 || '',
+      fornecedor: data.fornecedor
     };
 
     try {
@@ -348,18 +283,14 @@ const App: React.FC = () => {
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload)
       });
-
       const result = await response.json();
-      
-      if (result.result !== "created" && result.result !== "success") {
-        throw new Error(result.error || result.message || "Erro ao criar");
+      if (result.result === "created" || result.result === "success") {
+        showToast("Programação criada!", "success");
+        setTimeout(fetchData, 1000);
+        setIsCreateModalOpen(false); 
       }
-
-      showToast("Programação criada!", "success");
-      await fetchData();
-      setIsCreateModalOpen(false); 
     } catch (err) {
-      showToast(`Erro: ${err instanceof Error ? err.message : String(err)}`, "error");
+      showToast(`Erro ao criar.`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -374,40 +305,16 @@ const App: React.FC = () => {
     if (status === 'planning') {
       const today = new Date();
       today.setHours(0, 0, 0, 0); 
-      
-      const parseDate = (dateStr: string | undefined | null) => {
+      const parseDateHelper = (dateStr: any) => {
         if (!dateStr) return null;
         const s = String(dateStr).trim();
         if (s.includes('-')) {
           const parts = s.split('T')[0].split('-');
-          if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 0, 0, 0, 0);
-        }
-        if (s.includes('/')) {
-          const parts = s.split('/');
-          if (parts.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 0, 0, 0, 0);
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
         }
         return null;
       };
-
-      items.sort((a, b) => {
-        const startA = parseDate(a.date_start);
-        const endA = parseDate(a.date_end);
-        const startB = parseDate(b.date_start);
-        const endB = parseDate(b.date_end);
-
-        const getWeight = (c: Container, s: Date | null, e: Date | null) => {
-          if (!e) return 3; 
-          if (today.getTime() > e.getTime()) return 0; 
-          if ((!s || today.getTime() >= s.getTime()) && today.getTime() <= e.getTime()) return 1; 
-          return 2; 
-        };
-
-        const weightA = getWeight(a, startA, endA);
-        const weightB = getWeight(b, startB, endB);
-
-        if (weightA !== weightB) return weightA - weightB;
-        return (a.date_end || '').localeCompare(b.date_end || '');
-      });
+      items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
     }
 
     return (
@@ -421,23 +328,19 @@ const App: React.FC = () => {
             {items.length}
           </span>
         </div>
-        
         <div className="flex-1 p-2 overflow-y-auto space-y-2 custom-scrollbar">
           {items.length === 0 ? (
-            <div className="h-24 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/20">
-              <p className="text-xs">Vazio</p>
-            </div>
+            <div className="h-24 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/20 text-xs">Vazio</div>
           ) : (
             items.map(container => (
-              <div key={container.id} className="w-full">
-                <ContainerCard 
-                  container={container} 
-                  isAdmin={viewMode === 'admin'}
-                  onRegisterShipment={handleOpenRegister}
-                  onDelete={handleDeleteContainer}
-                  onReceive={handleReceiveContainer}
-                />
-              </div>
+              <ContainerCard 
+                key={container.id}
+                container={container} 
+                isAdmin={viewMode === 'admin'}
+                onRegisterShipment={handleOpenRegister}
+                onDelete={handleDeleteContainer}
+                onReceive={handleOpenReceive}
+              />
             ))
           )}
         </div>
@@ -447,14 +350,8 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden relative">
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-      `}</style>
-
-      {/* Toast Notification System */}
       {notification && (
-        <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-300 border
+        <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 border
           ${notification.type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400' : ''}
           ${notification.type === 'error' ? 'bg-rose-500/90 text-white border-rose-400' : ''}
           ${notification.type === 'info' ? 'bg-slate-800/90 text-cyan-400 border-cyan-500/30' : ''}
@@ -468,81 +365,30 @@ const App: React.FC = () => {
 
       <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl shadow-black/40">
         <div className="flex items-center gap-3">
-          <div className="h-9 flex items-center justify-start">
-            <img src={LOGO_URL} alt="Logo" className="h-full w-auto object-contain drop-shadow-lg" />
-          </div>
-          <div className="hidden sm:block">
-            <h1 className="font-bold text-base text-white leading-tight">Controle de Pedidos</h1>
-          </div>
-          
+          <img src={LOGO_URL} alt="Logo" className="h-9 w-auto object-contain drop-shadow-lg" />
+          <h1 className="font-bold text-base text-white leading-tight hidden sm:block">Controle de Pedidos</h1>
           {viewMode === 'admin' && (
-            <>
-              <div className="h-5 w-px bg-slate-800 mx-1 hidden sm:block"></div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-cyan-900/20 transition-all"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
-              </button>
-            </>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4"
+            >
+              <PlusCircle className="w-4 h-4" /> <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
+            </button>
           )}
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={fetchData} 
-            disabled={loading}
-            className="p-2 text-slate-400 hover:text-cyan-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            title={loading ? "Atualizando..." : "Atualizar Dados"}
-          >
+          <button onClick={fetchData} disabled={loading} className="p-2 text-slate-400 hover:text-cyan-400 transition-colors">
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-
-          <div className="relative hidden md:block">
-            <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <select 
-              value={supplierFilter}
-              onChange={(e) => setSupplierFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-cyan-500 outline-none appearance-none cursor-pointer hover:border-slate-600 transition-colors"
-            >
-              <option value="all">Todos Fornecedores</option>
-              {suppliers.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSwitchModeClick}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all
-              ${viewMode === 'admin' 
-                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' 
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-300 hover:bg-slate-800'
-              }
-            `}
-            title={viewMode === 'admin' ? "Sair do modo Admin" : "Acessar modo Admin"}
-          >
+          <button onClick={handleSwitchModeClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
             {viewMode === 'admin' ? <LogOut className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-            <span className="hidden sm:inline">
-              {viewMode === 'admin' ? 'SAIR ADMIN' : 'ACESSAR ADMIN'}
-            </span>
+            <span className="hidden sm:inline">{viewMode === 'admin' ? 'SAIR ADMIN' : 'ACESSAR ADMIN'}</span>
           </button>
         </div>
       </header>
 
       <main className="flex-1 overflow-hidden p-4 relative">
-        {error && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-rose-500/90 text-white px-4 py-2 rounded-lg shadow-xl text-sm font-medium flex items-center gap-2 animate-in slide-in-from-top-4">
-            <AlertOctagon className="w-4 h-4" />
-            {error}
-            <button onClick={fetchData} className="ml-2 underline hover:text-rose-100">Tentar novamente</button>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full max-w-[1600px] mx-auto w-full">
           {renderColumn('PLANEJAMENTO', 'planning', Calendar, 'border-slate-500/30')}
           {renderColumn('EM TRÂNSITO', 'transit', Ship, 'border-cyan-500/30')}
@@ -550,27 +396,9 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <RegisterModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        container={selectedContainer}
-        onSave={handleSaveShipment}
-        isSaving={isSaving}
-      />
-
-      <CreateModal 
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSave={handleCreateContainer}
-        isSaving={isSaving}
-        existingContainers={containers}
-      />
-
-      <PasswordModal 
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-        onSuccess={handleAdminSuccess}
-      />
+      <RegisterModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} container={selectedContainer} onSave={handleSaveModalData} isSaving={isSaving} mode={modalMode} />
+      <CreateModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSave={handleCreateContainer} isSaving={isSaving} existingContainers={containers} />
+      <PasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} onSuccess={() => setViewMode('admin')} />
     </div>
   );
 };
