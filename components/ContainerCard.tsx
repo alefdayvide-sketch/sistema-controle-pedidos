@@ -20,6 +20,15 @@ interface ContainerCardProps {
   isAdmin?: boolean;
 }
 
+// Helper para obter a semana ISO
+const getISOWeek = (date: Date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
 // Helper para formatar data BR (dd/mm)
 const formatDateBR = (dateVal: any, showYear = false) => {
   if (!dateVal) return "N/D";
@@ -75,7 +84,7 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
   const pickupDate = parseDate(container.date_pickup || container['Data Coleta']);
   const arrivalDate = container.date_arrival_forecast || container['Data Chegada'];
 
-  // Lógica de Status
+  // Lógica de Status (Atraso/Antecipação)
   let deviationType: 'none' | 'early' | 'late' = 'none';
   if ((isTransit || isDelivered) && pickupDate && start && end) {
       const pTime = new Date(pickupDate).setHours(0,0,0,0);
@@ -87,7 +96,14 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
       deviationType = 'late';
   }
 
-  // Styles
+  // Lógica para Alerta de Semana de Coleta (Usa a data final se estiver em planejamento)
+  const relevantDateForWeek = isPlanning ? end : pickupDate;
+  const isCollectWeek = relevantDateForWeek && 
+    getISOWeek(relevantDateForWeek) === getISOWeek(today) && 
+    relevantDateForWeek.getFullYear() === today.getFullYear() &&
+    !isDelivered;
+
+  // Styles de borda e sombra
   let wrapperGradient = '';
   let shadowClass = '';
 
@@ -124,39 +140,34 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
   const validItems = container.items?.filter(i => i.desc && i.desc.trim() !== '') || [];
   const displayItems = validItems.slice(0, 3);
   
-  // Handlers Seguros
+  // Handlers
   const handleEditClick = (e: React.MouseEvent) => {
       if (!isAdmin) return;
       onRegisterShipment(container.id);
   };
 
   const handleBtnReceive = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       onReceive(container.id);
   };
 
   const handleBtnDelete = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       onDelete(container.id);
   };
 
   const handleBtnEdit = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       onRegisterShipment(container.id);
   };
 
   return (
     <div className={`relative rounded-xl transition-all duration-300 group ${shadowClass} p-[1.5px] overflow-visible`}>
-        {/* Background Layer */}
         <div className={`absolute inset-0 ${wrapperGradient} rounded-xl`} style={{ zIndex: 0 }} />
 
-        {/* Content Layer */}
         <div className="relative z-10 flex flex-col w-full bg-slate-900 rounded-[10px] overflow-hidden">
             
-            {/* ZONA 1: Cabeçalho */}
+            {/* ZONA 1: Cabeçalho com Badges */}
             <div 
                 onClick={handleEditClick}
                 className={`px-3 py-2.5 flex justify-between items-start ${headerStyle.bg} ${headerStyle.border} ${isAdmin ? 'cursor-pointer' : ''}`}
@@ -181,10 +192,15 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                             <Zap className="w-2.5 h-2.5" /> ANTECIPADO
                         </div>
                     )}
+                    {isCollectWeek && deviationType === 'none' && (
+                        <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                            <Clock className="w-2.5 h-2.5" /> NA SEMANA
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* ZONA 2: Corpo / Lista de Itens */}
+            {/* ZONA 2: Corpo */}
             <div 
                 onClick={handleEditClick}
                 className={`px-3 pt-1.5 pb-2 flex-1 flex flex-col gap-2 ${isAdmin ? 'cursor-pointer' : ''}`}
@@ -228,12 +244,8 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
             {/* ZONA 3: Rodapé */}
             <div className="px-3 pb-2 mt-auto">
                 <div className="pt-1.5 flex flex-col gap-1 border-t border-slate-800/50 bg-slate-900">
-                    
                     <div className="flex items-end justify-between">
-                        <div 
-                            onClick={handleEditClick} 
-                            className={`flex-1 min-w-0 pr-1 ${isAdmin ? 'cursor-pointer' : ''}`}
-                        >
+                        <div onClick={handleEditClick} className={`flex-1 min-w-0 pr-1 ${isAdmin ? 'cursor-pointer' : ''}`}>
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <div className="flex items-center gap-1 text-[10px] whitespace-nowrap">
                                     <Calendar className={`w-3 h-3 ${deviationType === 'late' ? 'text-rose-500' : 'text-slate-500'}`} />
@@ -255,43 +267,22 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                             </div>
                         </div>
 
-                        {/* Botões de Ação */}
                         {isAdmin && (
-                            <div 
-                                className="flex items-center gap-1.5 shrink-0 relative" 
-                                style={{ zIndex: 100 }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
+                            <div className="flex items-center gap-1.5 shrink-0 relative" style={{ zIndex: 100 }}>
                                 <div className="flex items-center gap-0.5">
                                     {isTransit && (
-                                        <button 
-                                        type="button"
-                                        onClick={handleBtnEdit}
-                                        className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
-                                        title="Editar"
-                                        >
+                                        <button type="button" onClick={handleBtnEdit} className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors" title="Editar">
                                             <Edit className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                     {(isPlanning || isTransit) && (
-                                        <button 
-                                            type="button"
-                                            onClick={handleBtnDelete}
-                                            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
-                                            title="Excluir"
-                                        >
+                                        <button type="button" onClick={handleBtnDelete} className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors" title="Excluir">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                 </div>
-                                
                                 {isTransit && (
-                                    <button 
-                                    type="button"
-                                    onClick={handleBtnReceive}
-                                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-3 py-1.5 rounded shadow-lg shadow-emerald-900/20 transition-all active:translate-y-0.5 ml-0.5 cursor-pointer relative"
-                                    title="Receber"
-                                    >
+                                    <button type="button" onClick={handleBtnReceive} className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-3 py-1.5 rounded shadow-lg shadow-emerald-900/20 transition-all active:translate-y-0.5 ml-0.5 cursor-pointer relative">
                                         <CheckCircle2 className="w-3.5 h-3.5" />
                                         <span>RECEBER</span>
                                     </button>
@@ -300,7 +291,6 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                         )}
                     </div>
 
-                    {/* Linha adicional para datas especiais (Recebimento/Previsão) */}
                     <div className="flex items-center gap-2">
                         {isTransit && arrivalDate && (
                             <div className="flex items-center gap-1 text-[10px] text-cyan-400 whitespace-nowrap">
