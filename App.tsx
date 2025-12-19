@@ -37,6 +37,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
+  // Estado para aba ativa no Mobile
+  const [activeTab, setActiveTab] = useState<'planning' | 'transit' | 'yard'>('planning');
+
   const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => {
     return (localStorage.getItem('viewMode') as 'director' | 'admin') || 'director';
   });
@@ -125,11 +128,6 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  const suppliers = useMemo(() => {
-    const safeContainers = Array.isArray(containers) ? containers : [];
-    return Array.from(new Set(safeContainers.map(c => c.supplier)));
-  }, [containers]);
-
   const filteredContainers = useMemo(() => {
     const safeContainers = Array.isArray(containers) ? containers : [];
     if (supplierFilter === 'all') return safeContainers;
@@ -182,7 +180,6 @@ const App: React.FC = () => {
     const cleanId = normalizeId(id);
     const targetStatus = isReceive ? "Entregue" : "Em Trânsito";
     
-    // ATUALIZAÇÃO OTIMISTA
     setContainers(prev => prev.map(c => {
         if (normalizeId(c.id) === cleanId) {
             return {
@@ -203,26 +200,17 @@ const App: React.FC = () => {
     setIsModalOpen(false);
     showToast("Salvando alterações...", "info");
 
-    // PAYLOAD COM MÁXIMA REDUNDÂNCIA DE CABEÇALHOS
     const payload = {
       action: "update",
       id: cleanId,
       "Nf": formData.nf,
       "Data Coleta": formData.date_pickup,
       "Data Chegada": formData.date_arrival, 
-      
-      // Chaves redundantes para o Status
       "Status": targetStatus,
-      "Status ": targetStatus, // com espaço caso tenha erro no cabeçalho
-      "status": targetStatus,
-      "Situação": targetStatus,
-      
       "Item 1 Real": formData.items_actual[0] || '',
       "Item 2 Real": formData.items_actual[1] || '',
       "Item 3 Real": formData.items_actual[2] || ''
     };
-
-    console.log("Enviando Payload para API:", payload);
 
     try {
       const response = await fetch(API_URL, {
@@ -238,14 +226,13 @@ const App: React.FC = () => {
       
       showToast(isReceive ? "Entregue com sucesso!" : "Embarque registrado!", "success");
       
-      // AGUARDA 1.5 SEGUNDOS PARA GARANTIR QUE O GOOGLE SHEETS PROCESSOU
       setTimeout(() => {
         fetchData();
       }, 1500);
 
     } catch (err) {
       showToast(`Erro ao sincronizar. Tente atualizar.`, "error");
-      setTimeout(fetchData, 2000); // Tenta recuperar dados originais em caso de falha
+      setTimeout(fetchData, 2000);
     } finally {
       setIsSaving(false);
     }
@@ -298,30 +285,22 @@ const App: React.FC = () => {
 
   const selectedContainer = containers?.find(c => c.id === selectedContainerId);
 
-  const renderColumn = (title: string, status: string, Icon: React.ElementType, colorClass: string) => {
+  const renderColumn = (title: string, status: 'planning' | 'transit' | 'yard', Icon: React.ElementType, borderClass: string) => {
     const safeFiltered = Array.isArray(filteredContainers) ? filteredContainers : [];
     let items = safeFiltered.filter(c => c.status === status);
     
     if (status === 'planning') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); 
-      const parseDateHelper = (dateStr: any) => {
-        if (!dateStr) return null;
-        const s = String(dateStr).trim();
-        if (s.includes('-')) {
-          const parts = s.split('T')[0].split('-');
-          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        }
-        return null;
-      };
       items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
     }
 
+    // No Mobile, escondemos as colunas que não são a ativa
+    const isHiddenOnMobile = activeTab !== status;
+
     return (
-      <div className="flex flex-col h-full bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
-        <div className={`p-3 border-b border-slate-800 flex items-center justify-between ${colorClass} bg-opacity-5`}>
+      <div className={`flex flex-col h-full bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden ${isHiddenOnMobile ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30`}>
           <div className="flex items-center gap-2">
-            <Icon className={`w-4 h-4 ${colorClass}`} />
+            <Icon className={`w-4 h-4 ${status === 'yard' ? 'text-emerald-500' : status === 'transit' ? 'text-cyan-500' : 'text-slate-500'}`} />
             <h2 className="font-bold text-slate-200 text-sm tracking-wide">{title}</h2>
           </div>
           <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
@@ -364,32 +343,59 @@ const App: React.FC = () => {
       )}
 
       <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl shadow-black/40">
-        <div className="flex items-center gap-3">
-          <img src={LOGO_URL} alt="Logo" className="h-9 w-auto object-contain drop-shadow-lg" />
-          <h1 className="font-bold text-base text-white leading-tight hidden sm:block">Controle de Pedidos</h1>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <img src={LOGO_URL} alt="Logo" className="h-8 sm:h-9 w-auto object-contain drop-shadow-lg" />
+          <h1 className="font-bold text-[13px] sm:text-base text-white leading-tight">Controle de Pedidos</h1>
           {viewMode === 'admin' && (
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4"
+              className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all ml-2 sm:ml-4"
             >
-              <PlusCircle className="w-4 h-4" /> <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
+              <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
+              <span className="sm:hidden">NOVO</span>
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <button onClick={fetchData} disabled={loading} className="p-2 text-slate-400 hover:text-cyan-400 transition-colors">
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+        <div className="flex items-center gap-1 sm:gap-3">
+          <button onClick={fetchData} disabled={loading} className="p-1.5 sm:p-2 text-slate-400 hover:text-cyan-400 transition-colors">
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button onClick={handleSwitchModeClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-            {viewMode === 'admin' ? <LogOut className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
+          <button onClick={handleSwitchModeClick} className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg border text-[10px] sm:text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+            {viewMode === 'admin' ? <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
             <span className="hidden sm:inline">{viewMode === 'admin' ? 'SAIR ADMIN' : 'ACESSAR ADMIN'}</span>
+            <span className="sm:hidden">{viewMode === 'admin' ? 'SAIR' : 'ADMIN'}</span>
           </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden p-4 relative">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full max-w-[1600px] mx-auto w-full">
+      {/* Navegação por Abas (Exclusivo Mobile) */}
+      <nav className="flex md:hidden bg-slate-900 border-b border-slate-800 px-2 py-2 shrink-0 z-10 gap-2">
+        <button 
+          onClick={() => setActiveTab('planning')}
+          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white shadow-inner' : 'border-transparent text-slate-500'}`}
+        >
+          <Calendar className={`w-5 h-5 mb-1 ${activeTab === 'planning' ? 'text-slate-200' : 'text-slate-600'}`} />
+          <span className="text-[9px] font-bold uppercase tracking-wider">Planejamento</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('transit')}
+          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'transit' ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-400 shadow-inner' : 'border-transparent text-slate-500'}`}
+        >
+          <Ship className={`w-5 h-5 mb-1 ${activeTab === 'transit' ? 'text-cyan-400' : 'text-slate-600'}`} />
+          <span className="text-[9px] font-bold uppercase tracking-wider">Em Trânsito</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('yard')}
+          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'yard' ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400 shadow-inner' : 'border-transparent text-slate-500'}`}
+        >
+          <CheckCircle2 className={`w-5 h-5 mb-1 ${activeTab === 'yard' ? 'text-emerald-400' : 'text-slate-600'}`} />
+          <span className="text-[9px] font-bold uppercase tracking-wider">Pátio</span>
+        </button>
+      </nav>
+
+      <main className="flex-1 overflow-hidden p-3 sm:p-4 relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 h-full max-w-[1600px] mx-auto w-full">
           {renderColumn('PLANEJAMENTO', 'planning', Calendar, 'border-slate-500/30')}
           {renderColumn('EM TRÂNSITO', 'transit', Ship, 'border-cyan-500/30')}
           {renderColumn('PÁTIO / ENTREGUE', 'yard', CheckCircle2, 'border-emerald-500/30')}
