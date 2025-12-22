@@ -5,7 +5,7 @@ import {
   Ship, 
   Filter, 
   UserCircle,
-  ShieldCheck,
+  ShieldCheck, 
   Search,
   RefreshCw,
   AlertOctagon,
@@ -37,7 +37,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
-  // Estado para aba ativa no Mobile
+  // Estado para aba ativa no Mobile (Planejamento, Trânsito ou Pátio)
   const [activeTab, setActiveTab] = useState<'planning' | 'transit' | 'yard'>('planning');
 
   const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => {
@@ -293,12 +293,11 @@ const App: React.FC = () => {
       items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
     }
 
-    // No Mobile, escondemos as colunas que não são a ativa
     const isHiddenOnMobile = activeTab !== status;
 
     return (
       <div className={`flex flex-col h-full bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden ${isHiddenOnMobile ? 'hidden md:flex' : 'flex'}`}>
-        <div className={`p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30`}>
+        <div className={`p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30 shrink-0`}>
           <div className="flex items-center gap-2">
             <Icon className={`w-4 h-4 ${status === 'yard' ? 'text-emerald-500' : status === 'transit' ? 'text-cyan-500' : 'text-slate-500'}`} />
             <h2 className="font-bold text-slate-200 text-sm tracking-wide">{title}</h2>
@@ -307,7 +306,8 @@ const App: React.FC = () => {
             {items.length}
           </span>
         </div>
-        <div className="flex-1 p-2 overflow-y-auto space-y-2 custom-scrollbar">
+        {/* pb-32 no mobile resolve o problema de não conseguir rolar até o fim e cortar informações do último card */}
+        <div className="flex-1 p-2 overflow-y-auto space-y-2 custom-scrollbar pb-32 md:pb-2">
           {items.length === 0 ? (
             <div className="h-24 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/20 text-xs">Vazio</div>
           ) : (
@@ -343,54 +343,54 @@ const App: React.FC = () => {
       )}
 
       <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl shadow-black/40">
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2">
           <img src={LOGO_URL} alt="Logo" className="h-8 sm:h-9 w-auto object-contain drop-shadow-lg" />
-          <h1 className="font-bold text-[13px] sm:text-base text-white leading-tight">Controle de Pedidos</h1>
+          <h1 className="font-bold text-[13px] sm:text-base text-white leading-tight whitespace-nowrap">Controle de Pedidos</h1>
           {viewMode === 'admin' && (
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all ml-2 sm:ml-4"
+              className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all ml-1 sm:ml-4"
             >
-              <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
+              <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+              <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
               <span className="sm:hidden">NOVO</span>
             </button>
           )}
         </div>
 
         <div className="flex items-center gap-1 sm:gap-3">
-          <button onClick={fetchData} disabled={loading} className="p-1.5 sm:p-2 text-slate-400 hover:text-cyan-400 transition-colors">
+          <button onClick={fetchData} disabled={loading} className="p-1.5 text-slate-400 hover:text-cyan-400 transition-colors">
             <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button onClick={handleSwitchModeClick} className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg border text-[10px] sm:text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-            {viewMode === 'admin' ? <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-            <span className="hidden sm:inline">{viewMode === 'admin' ? 'SAIR ADMIN' : 'ACESSAR ADMIN'}</span>
-            <span className="sm:hidden">{viewMode === 'admin' ? 'SAIR' : 'ADMIN'}</span>
+          <button onClick={handleSwitchModeClick} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] sm:text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+            {viewMode === 'admin' ? <LogOut className="w-3.5 h-3.5" /> : <LogIn className="w-3.5 h-3.5" />}
+            <span>{viewMode === 'admin' ? 'ADMIN' : 'ADMIN'}</span>
           </button>
         </div>
       </header>
 
       {/* Navegação por Abas (Exclusivo Mobile) */}
-      <nav className="flex md:hidden bg-slate-900 border-b border-slate-800 px-2 py-2 shrink-0 z-10 gap-2">
+      <nav className="flex md:hidden bg-slate-900 border-b border-slate-800 px-2 py-2 shrink-0 z-10 gap-1.5">
         <button 
           onClick={() => setActiveTab('planning')}
-          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white shadow-inner' : 'border-transparent text-slate-500'}`}
+          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
         >
           <Calendar className={`w-5 h-5 mb-1 ${activeTab === 'planning' ? 'text-slate-200' : 'text-slate-600'}`} />
-          <span className="text-[9px] font-bold uppercase tracking-wider">Planejamento</span>
+          <span className="text-[8px] font-extrabold uppercase tracking-widest">Planejamento</span>
         </button>
         <button 
           onClick={() => setActiveTab('transit')}
-          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'transit' ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-400 shadow-inner' : 'border-transparent text-slate-500'}`}
+          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'transit' ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-400 shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
         >
           <Ship className={`w-5 h-5 mb-1 ${activeTab === 'transit' ? 'text-cyan-400' : 'text-slate-600'}`} />
-          <span className="text-[9px] font-bold uppercase tracking-wider">Em Trânsito</span>
+          <span className="text-[8px] font-extrabold uppercase tracking-widest">Em Trânsito</span>
         </button>
         <button 
           onClick={() => setActiveTab('yard')}
-          className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all border ${activeTab === 'yard' ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400 shadow-inner' : 'border-transparent text-slate-500'}`}
+          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'yard' ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400 shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
         >
           <CheckCircle2 className={`w-5 h-5 mb-1 ${activeTab === 'yard' ? 'text-emerald-400' : 'text-slate-600'}`} />
-          <span className="text-[9px] font-bold uppercase tracking-wider">Pátio</span>
+          <span className="text-[8px] font-extrabold uppercase tracking-widest">Pátio</span>
         </button>
       </nav>
 
