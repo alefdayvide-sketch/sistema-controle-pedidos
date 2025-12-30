@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Container, ContainerItem } from '../types';
 import { 
@@ -25,22 +26,17 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Função para tentar extrair volume da descrição (ex: 1050x90x40)
   const calculateVolumeFromDesc = (item: ContainerItem): number => {
-    // Se o m3 já foi informado manualmente, usamos ele
     if (item.m3) {
       const manualM3 = parseFloat(item.m3.replace(',', '.'));
       if (!isNaN(manualM3)) return manualM3;
     }
 
-    // Tenta encontrar 3 números (dimensões) na descrição
-    // Suporta: 1000x200x20, 1000*200*20, 1000 x 200 x 20
-    // Melhorado para aceitar vírgula ou ponto: (\d+(?:[.,]\d+)?)
     const regex = /(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)/;
     const match = item.desc.match(regex);
 
     if (match) {
-      const d1 = parseFloat(match[1].replace(',', '.')) / 1000; // mm -> m
+      const d1 = parseFloat(match[1].replace(',', '.')) / 1000;
       const d2 = parseFloat(match[2].replace(',', '.')) / 1000;
       const d3 = parseFloat(match[3].replace(',', '.')) / 1000;
       const qtd = parseFloat(item.qtd) || 0;
@@ -130,8 +126,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        <div className="w-full md:w-64 border-r border-slate-800 overflow-y-auto shrink-0 bg-slate-900/20 custom-scrollbar">
+      {/* Ajuste de overflow para Mobile vs Desktop */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+        
+        {/* Sidebar: Remove overflow fixo no mobile para permitir rolagem da página toda */}
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 overflow-visible md:overflow-y-auto shrink-0 bg-slate-900/20 custom-scrollbar">
           <div className="p-4 border-b border-slate-800">
             <h3 className="text-[10px] font-bold text-slate-500 uppercase">Lista de Fornecedores</h3>
           </div>
@@ -149,11 +148,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-32">
+        {/* Área de Conteúdo: No mobile, segue o fluxo de rolagem do pai */}
+        <div className="flex-1 md:overflow-y-auto p-4 md:p-6 custom-scrollbar pb-32">
           {!selectedSupplier ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50">
+            <div className="h-64 md:h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50">
               <Package className="w-16 h-16" />
-              <p className="font-bold uppercase text-sm">Selecione um fornecedor para análise</p>
+              <p className="font-bold uppercase text-sm text-center">Selecione um fornecedor para análise</p>
             </div>
           ) : (
             <div className="space-y-6 max-w-5xl mx-auto">
