@@ -1,9 +1,6 @@
-
 export type ContainerStatus = 'planning' | 'transit' | 'yard';
 export type Priority = 'Normal' | 'Alta';
 
-// Interface for the raw JSON coming from Google Scripts
-// We add [key: string]: any to allow columns like "Item 1 Real" without TS errors
 export interface RawApiContainer {
   "Id": string;
   "Fornecedor": string;
@@ -14,15 +11,20 @@ export interface RawApiContainer {
   "Nf": string;
   "Data Coleta": string;
   "Data Chegada": string;
-  // Correção: Adicionadas chaves sem acento e com acento para compatibilidade
   "Data Inicio"?: string;
   "Data Início"?: string;
   "Data Fim"?: string;
-  // Dynamic columns from Sheet
   [key: string]: any; 
 }
 
-// Internal Application State Interface
+export interface ContainerItem {
+  desc: string;
+  qtd: string;
+  real: string;
+  m3?: string;
+  isExtra?: boolean;
+}
+
 export interface Container {
   id: string;
   supplier: string;
@@ -35,15 +37,7 @@ export interface Container {
   date_arrival_forecast: string;
   date_start: string;
   date_end: string;
-  
-  // Structured Items Array for easy rendering in Card/Modals
-  items: {
-    desc: string;
-    qtd: string;
-    real: string; // Mapped from 'Item X Real'
-  }[];
-
-  // CRITICAL: Index signature to allow dynamic access if needed
+  items: ContainerItem[];
   [key: string]: any; 
 }
 
@@ -52,6 +46,7 @@ export interface ShipmentFormData {
   date_pickup: string;
   date_arrival: string; 
   items_actual: string[];
+  extra_items: ContainerItem[];
 }
 
 export interface CreateFormData {

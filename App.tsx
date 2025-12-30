@@ -1,26 +1,22 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  LayoutDashboard, 
-  Settings, 
-  Ship, 
-  Filter, 
-  UserCircle,
-  ShieldCheck, 
-  Search,
   RefreshCw,
-  AlertOctagon,
   PlusCircle,
   Calendar,
   CheckCircle2,
   LogOut,
   LogIn,
-  Info
+  BarChart3,
+  Ship
 } from 'lucide-react';
 import ContainerCard from './components/ContainerCard';
 import RegisterModal from './components/RegisterModal';
 import CreateModal from './components/CreateModal';
 import PasswordModal from './components/PasswordModal';
-import { Container, RawApiContainer, ShipmentFormData, CreateFormData } from './types';
+import DashboardView from './components/DashboardView';
+import DetailsModal from './components/DetailsModal';
+import { Container, RawApiContainer, ShipmentFormData, CreateFormData, ContainerItem } from './types';
 import { API_URL } from './constants';
 
 const DRIVE_FILE_ID = "15ubzgKAvMV1hz-4PjWzfxi_iQmUVHPzU";
@@ -28,33 +24,27 @@ const LOGO_URL = `https://lh3.googleusercontent.com/d/${DRIVE_FILE_ID}`;
 
 const normalizeId = (id: any): string => {
   if (!id) return '';
-  return String(id).replace(/\s+/g, '').toUpperCase();
+  return String(id).trim().replace(/\s+/g, '').toUpperCase();
 };
 
 const App: React.FC = () => {
   const [containers, setContainers] = useState<Container[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
-
-  // Estado para aba ativa no Mobile (Planejamento, Trânsito ou Pátio)
+  const [currentView, setCurrentView] = useState<'ops' | 'dashboard'>('ops');
   const [activeTab, setActiveTab] = useState<'planning' | 'transit' | 'yard'>('planning');
-
-  const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => {
-    return (localStorage.getItem('viewMode') as 'director' | 'admin') || 'director';
-  });
-
-  const [supplierFilter, setSupplierFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => (localStorage.getItem('viewMode') as 'director' | 'admin') || 'director');
+  
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'shipment' | 'receive'>('shipment');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('viewMode', viewMode);
-  }, [viewMode]);
+  useEffect(() => { localStorage.setItem('viewMode', viewMode); }, [viewMode]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ message, type });
@@ -63,143 +53,71 @@ const App: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    setError(null);
     try {
       const response = await fetch(API_URL);
       const data: RawApiContainer[] = await response.json();
       
-      if (!Array.isArray(data)) {
-        setContainers([]); 
-        return;
-      }
+      if (!Array.isArray(data)) { setContainers([]); return; }
 
-      const activeData = data.filter(item => (item['Status'] || "") !== "Excluído");
+      const mappedData = data
+        .filter(item => (item['Status'] || "") !== "Excluído")
+        .map((item): Container => {
+          const rawStatus = item['Status'] || "";
+          let status: Container['status'] = 'planning';
+          if (rawStatus === "Em Trânsito") status = 'transit';
+          else if (rawStatus === "Entregue") status = 'yard';
 
-      const mappedData = activeData.map((item): Container => {
-        const rawStatus = item['Status'] || "";
-        let status: Container['status'] = 'planning';
-        
-        if (rawStatus === "Em Trânsito") status = 'transit';
-        else if (rawStatus === "Entregue") status = 'yard';
-        else status = 'planning'; 
+          const itemsList: ContainerItem[] = [];
+          
+          if (item['Item 1 Desc']) itemsList.push({ desc: item['Item 1 Desc'], qtd: String(item['Item 1 Qtd'] || ''), real: String(item['Item 1 Real'] || ''), m3: String(item['Item 1 M3'] || '') });
+          if (item['Item 2 Desc']) itemsList.push({ desc: item['Item 2 Desc'], qtd: String(item['Item 2 Qtd'] || ''), real: String(item['Item 2 Real'] || ''), m3: String(item['Item 2 M3'] || '') });
+          if (item['Item 3 Desc']) itemsList.push({ desc: item['Item 3 Desc'], qtd: String(item['Item 3 Qtd'] || ''), real: String(item['Item 3 Real'] || ''), m3: String(item['Item 3 M3'] || '') });
 
-        const itemsList = [];
-        if (item['Item 1 Desc']) itemsList.push({ desc: item['Item 1 Desc'], qtd: item['Item 1 Qtd'] || '', real: item['Item 1 Real'] || '' });
-        if (item['Item 2 Desc']) itemsList.push({ desc: item['Item 2 Desc'], qtd: item['Item 2 Qtd'] || '', real: item['Item 2 Real'] || '' });
-        if (item['Item 3 Desc']) itemsList.push({ desc: item['Item 3 Desc'], qtd: item['Item 3 Qtd'] || '', real: item['Item 3 Real'] || '' });
+          const rawExtras = String(item['Itens Extras'] || "").trim();
+          if (rawExtras && (rawExtras.startsWith('[') || rawExtras.startsWith('{'))) {
+             try {
+                const extrasJson = JSON.parse(rawExtras);
+                if (Array.isArray(extrasJson)) {
+                  extrasJson.forEach((ex: any) => {
+                    itemsList.push({ ...ex, real: ex.real || ex.qtd, isExtra: true });
+                  });
+                }
+             } catch(e) { console.error("Erro ao processar JSON de extras", e); }
+          }
 
-        let requestedSummary = item['Material Solicitado'] || "";
-        if (itemsList.length > 0 && !requestedSummary) {
-          requestedSummary = itemsList.map(i => i.desc).join(', ');
-        }
-
-        const rawInicio = item['Data Inicio'] || item['Data Início'] || '';
-        const rawFim = item['Data Fim'] || '';
-        const rawId = item['Id'] || item['id'];
-        const robustId = rawId ? normalizeId(rawId) : `TEMP-${Math.random().toString(36).substr(2,9)}`;
-
-        return {
-          ...item,
-          id: robustId,
-          supplier: item['Fornecedor'],
-          status: status,
-          priority: item['Prioridade'],
-          measures_requested: requestedSummary,
-          measures_actual: item['Material Embarcado'],
-          nf: item['Nf'],
-          date_pickup: item['Data Coleta'],
-          date_arrival_forecast: item['Data Chegada'],
-          date_start: rawInicio,
-          date_end: rawFim,
-          items: itemsList, 
-        };
-      });
+          return {
+            ...item,
+            id: normalizeId(item['Id'] || item['id']),
+            supplier: item['Fornecedor'],
+            status: status,
+            priority: item['Prioridade'],
+            measures_requested: item['Material Solicitado'] || "",
+            measures_actual: item['Material Embarcado'] || "",
+            nf: item['Nf'] || "",
+            date_pickup: item['Data Coleta'] || "",
+            date_arrival_forecast: item['Data Chegada'] || "",
+            date_start: item['Data Inicio'] || item['Data Início'] || '',
+            date_end: item['Data Fim'] || '',
+            items: itemsList, 
+          };
+        });
 
       setContainers(mappedData);
     } catch (err) {
-      setError("Falha ao carregar dados. Verifique sua conexão.");
-      setContainers([]); 
+      showToast("Erro ao carregar dados.", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const filteredContainers = useMemo(() => {
-    const safeContainers = Array.isArray(containers) ? containers : [];
-    if (supplierFilter === 'all') return safeContainers;
-    return safeContainers.filter(c => c.supplier === supplierFilter);
-  }, [containers, supplierFilter]);
-
-  const handleOpenRegister = (id: string) => {
-    setSelectedContainerId(id);
-    setModalMode('shipment');
-    setIsModalOpen(true);
-  };
-
-  const handleOpenReceive = (id: string) => {
-    setSelectedContainerId(id);
-    setModalMode('receive');
-    setIsModalOpen(true);
-  };
-
-  const handleSwitchModeClick = () => {
-    if (viewMode === 'admin') setViewMode('director');
-    else setIsPasswordModalOpen(true);
-  };
-
-  const handleDeleteContainer = async (id: string) => {
-    const cleanId = normalizeId(id);
-    if (!cleanId || !window.confirm(`ATENÇÃO: Deseja excluir ${cleanId}?`)) return;
-
-    setContainers(prev => prev.filter(c => normalizeId(c.id) !== cleanId));
-    showToast("Excluindo...", "info");
-
-    try {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "delete", id: cleanId, "Status": "Excluído" })
-      });
-      const result = await response.json();
-      if (result?.result === "success") {
-        showToast("Excluído!", "success");
-      } else {
-        fetchData();
-      }
-    } catch (err) {
-      fetchData();
-    }
-  };
+  useEffect(() => { fetchData(); }, []);
 
   const handleSaveModalData = async (id: string, formData: ShipmentFormData, isReceive: boolean) => {
     setIsSaving(true);
     const cleanId = normalizeId(id);
     const targetStatus = isReceive ? "Entregue" : "Em Trânsito";
+    const extrasJsonString = formData.extra_items.length > 0 ? JSON.stringify(formData.extra_items) : '';
     
-    setContainers(prev => prev.map(c => {
-        if (normalizeId(c.id) === cleanId) {
-            return {
-                ...c,
-                status: isReceive ? 'yard' : 'transit',
-                nf: formData.nf,
-                date_pickup: formData.date_pickup,
-                date_arrival_forecast: formData.date_arrival,
-                items: c.items.map((item, idx) => ({
-                    ...item,
-                    real: formData.items_actual[idx] || item.real
-                }))
-            };
-        }
-        return c;
-    }));
-    
-    setIsModalOpen(false);
-    showToast("Salvando alterações...", "info");
-
     const payload = {
       action: "update",
       id: cleanId,
@@ -207,6 +125,7 @@ const App: React.FC = () => {
       "Data Coleta": formData.date_pickup,
       "Data Chegada": formData.date_arrival, 
       "Status": targetStatus,
+      "Itens Extras": extrasJsonString, 
       "Item 1 Real": formData.items_actual[0] || '',
       "Item 2 Real": formData.items_actual[1] || '',
       "Item 3 Real": formData.items_actual[2] || ''
@@ -220,19 +139,13 @@ const App: React.FC = () => {
       });
       
       const result = await response.json();
-      if (result.result !== "updated" && result.result !== "edit" && result.result !== "success") {
-        throw new Error(result.error || result.message || "Erro no servidor");
-      }
-      
-      showToast(isReceive ? "Entregue com sucesso!" : "Embarque registrado!", "success");
-      
-      setTimeout(() => {
-        fetchData();
-      }, 1500);
-
+      if (result.result === "success") {
+        showToast("Dados salvos com sucesso!", "success");
+        setIsModalOpen(false);
+        fetchData(); 
+      } else { throw new Error(result.message); }
     } catch (err) {
-      showToast(`Erro ao sincronizar. Tente atualizar.`, "error");
-      setTimeout(fetchData, 2000);
+      showToast(`Erro de conexão com a planilha.`, "error");
     } finally {
       setIsSaving(false);
     }
@@ -259,9 +172,7 @@ const App: React.FC = () => {
       "Item 2 M3": data.items[1]?.m3 || '',
       "Item 3 Desc": data.items[2]?.desc || '',
       "Item 3 Qtd": data.items[2]?.qtd || '',
-      "Item 3 M3": data.items[2]?.m3 || '',
-      id: data.id,
-      fornecedor: data.fornecedor
+      "Item 3 M3": data.items[2]?.m3 || ''
     };
 
     try {
@@ -270,55 +181,61 @@ const App: React.FC = () => {
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload)
       });
-      const result = await response.json();
-      if (result.result === "created" || result.result === "success") {
+      if ((await response.json()).result === "success") {
         showToast("Programação criada!", "success");
-        setTimeout(fetchData, 1000);
         setIsCreateModalOpen(false); 
+        fetchData();
       }
     } catch (err) {
-      showToast(`Erro ao criar.`, "error");
+      showToast("Erro ao criar.", "error");
     } finally {
       setIsSaving(false);
     }
   };
 
+  const handleDeleteContainer = async (id: string) => {
+    const cleanId = normalizeId(id);
+    if (!cleanId || !window.confirm(`Excluir permanentemente ${cleanId}?`)) return;
+    try {
+      await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "delete", id: cleanId, "Status": "Excluído" })
+      });
+      showToast("Removido com sucesso!", "success");
+      fetchData();
+    } catch (err) { showToast("Erro ao excluir.", "error"); }
+  };
+
   const selectedContainer = containers?.find(c => c.id === selectedContainerId);
 
-  const renderColumn = (title: string, status: 'planning' | 'transit' | 'yard', Icon: React.ElementType, borderClass: string) => {
-    const safeFiltered = Array.isArray(filteredContainers) ? filteredContainers : [];
-    let items = safeFiltered.filter(c => c.status === status);
-    
-    if (status === 'planning') {
-      items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
-    }
-
+  const renderColumn = (title: string, status: 'planning' | 'transit' | 'yard', Icon: React.ElementType) => {
+    let items = containers.filter(c => c.status === status);
+    if (status === 'planning') items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
     const isHiddenOnMobile = activeTab !== status;
 
     return (
       <div className={`flex flex-col h-full bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden ${isHiddenOnMobile ? 'hidden md:flex' : 'flex'}`}>
-        <div className={`p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30 shrink-0`}>
+        <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/30 shrink-0">
           <div className="flex items-center gap-2">
             <Icon className={`w-4 h-4 ${status === 'yard' ? 'text-emerald-500' : status === 'transit' ? 'text-cyan-500' : 'text-slate-500'}`} />
-            <h2 className="font-bold text-slate-200 text-sm tracking-wide">{title}</h2>
+            <h2 className="font-bold text-slate-200 text-sm tracking-wide uppercase">{title}</h2>
           </div>
-          <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
-            {items.length}
-          </span>
+          <span className="text-[10px] font-bold bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">{items.length}</span>
         </div>
-        {/* pb-32 no mobile resolve o problema de não conseguir rolar até o fim e cortar informações do último card */}
         <div className="flex-1 p-2 overflow-y-auto space-y-2 custom-scrollbar pb-32 md:pb-2">
           {items.length === 0 ? (
-            <div className="h-24 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/20 text-xs">Vazio</div>
+            <div className="h-24 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-lg bg-slate-900/20 text-xs italic">Sem registros</div>
           ) : (
             items.map(container => (
               <ContainerCard 
-                key={container.id}
+                key={container.id} 
                 container={container} 
-                isAdmin={viewMode === 'admin'}
-                onRegisterShipment={handleOpenRegister}
-                onDelete={handleDeleteContainer}
+                isAdmin={viewMode === 'admin'} 
+                onRegisterShipment={handleOpenRegister} 
+                onDelete={handleDeleteContainer} 
                 onReceive={handleOpenReceive}
+                onViewDetails={handleOpenDetails}
               />
             ))
           )}
@@ -327,82 +244,56 @@ const App: React.FC = () => {
     );
   };
 
+  const handleOpenRegister = (id: string) => { setSelectedContainerId(id); setModalMode('shipment'); setIsModalOpen(true); };
+  const handleOpenReceive = (id: string) => { setSelectedContainerId(id); setModalMode('receive'); setIsModalOpen(true); };
+  const handleOpenDetails = (id: string) => { setSelectedContainerId(id); setIsDetailsOpen(true); };
+
+  if (currentView === 'dashboard') return <DashboardView containers={containers} onBack={() => setCurrentView('ops')} />;
+
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden relative">
       {notification && (
         <div className={`absolute top-20 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 border
-          ${notification.type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400' : ''}
-          ${notification.type === 'error' ? 'bg-rose-500/90 text-white border-rose-400' : ''}
-          ${notification.type === 'info' ? 'bg-slate-800/90 text-cyan-400 border-cyan-500/30' : ''}
+          ${notification.type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400' : notification.type === 'error' ? 'bg-rose-500/90 text-white border-rose-400' : 'bg-slate-800/90 text-cyan-400 border-cyan-500/30'}
         `}>
-          {notification.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
-          {notification.type === 'error' && <AlertOctagon className="w-5 h-5" />}
-          {notification.type === 'info' && <Info className="w-5 h-5" />}
           <span className="text-sm font-bold">{notification.message}</span>
         </div>
       )}
 
-      <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl shadow-black/40">
+      <header className="h-14 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-4 shrink-0 z-20 shadow-xl">
         <div className="flex items-center gap-2">
-          <img src={LOGO_URL} alt="Logo" className="h-8 sm:h-9 w-auto object-contain drop-shadow-lg" />
-          <h1 className="font-bold text-[13px] sm:text-base text-white leading-tight whitespace-nowrap">Controle de Pedidos</h1>
-          {viewMode === 'admin' && (
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all ml-1 sm:ml-4"
-            >
-              <PlusCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
-              <span className="hidden sm:inline">NOVA PROGRAMAÇÃO</span>
-              <span className="sm:hidden">NOVO</span>
-            </button>
-          )}
+          <img src={LOGO_URL} alt="Logo" className="h-8 w-auto object-contain" />
+          <h1 className="font-bold text-sm sm:text-base text-white hidden xs:block">Controle de Pedidos</h1>
+          <button onClick={() => setCurrentView('dashboard')} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold border border-slate-700 transition-all ml-2"><BarChart3 className="w-4 h-4 text-cyan-400" /> <span className="hidden sm:inline">DASHBOARD</span></button>
         </div>
-
         <div className="flex items-center gap-1 sm:gap-3">
-          <button onClick={fetchData} disabled={loading} className="p-1.5 text-slate-400 hover:text-cyan-400 transition-colors">
-            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button onClick={handleSwitchModeClick} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] sm:text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+          {viewMode === 'admin' && (
+            <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all"><PlusCircle className="w-3.5 h-3.5" /> <span className="hidden sm:inline">NOVO</span></button>
+          )}
+          <button onClick={fetchData} disabled={loading} className="p-1.5 text-slate-400 hover:text-cyan-400 transition-colors"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button onClick={() => viewMode === 'admin' ? setViewMode('director') : setIsPasswordModalOpen(true)} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-[10px] sm:text-xs font-bold transition-all ${viewMode === 'admin' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
             {viewMode === 'admin' ? <LogOut className="w-3.5 h-3.5" /> : <LogIn className="w-3.5 h-3.5" />}
-            <span>{viewMode === 'admin' ? 'ADMIN' : 'ADMIN'}</span>
+            <span>ADMIN</span>
           </button>
         </div>
       </header>
 
-      {/* Navegação por Abas (Exclusivo Mobile) */}
       <nav className="flex md:hidden bg-slate-900 border-b border-slate-800 px-2 py-2 shrink-0 z-10 gap-1.5">
-        <button 
-          onClick={() => setActiveTab('planning')}
-          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
-        >
-          <Calendar className={`w-5 h-5 mb-1 ${activeTab === 'planning' ? 'text-slate-200' : 'text-slate-600'}`} />
-          <span className="text-[8px] font-extrabold uppercase tracking-widest">Planejamento</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('transit')}
-          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'transit' ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-400 shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
-        >
-          <Ship className={`w-5 h-5 mb-1 ${activeTab === 'transit' ? 'text-cyan-400' : 'text-slate-600'}`} />
-          <span className="text-[8px] font-extrabold uppercase tracking-widest">Em Trânsito</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('yard')}
-          className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl transition-all border ${activeTab === 'yard' ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400 shadow-inner' : 'border-transparent text-slate-500 opacity-60'}`}
-        >
-          <CheckCircle2 className={`w-5 h-5 mb-1 ${activeTab === 'yard' ? 'text-emerald-400' : 'text-slate-600'}`} />
-          <span className="text-[8px] font-extrabold uppercase tracking-widest">Pátio</span>
-        </button>
+        <button onClick={() => setActiveTab('planning')} className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white' : 'border-transparent text-slate-500'}`}><Calendar className="w-5 h-5 mb-1" /><span className="text-[8px] font-extrabold uppercase">Planejamento</span></button>
+        <button onClick={() => setActiveTab('transit')} className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl border ${activeTab === 'transit' ? 'bg-cyan-950/30 border-cyan-500/40 text-cyan-400' : 'border-transparent text-slate-500'}`}><Ship className="w-5 h-5 mb-1" /><span className="text-[8px] font-extrabold uppercase">Em Trânsito</span></button>
+        <button onClick={() => setActiveTab('yard')} className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl border ${activeTab === 'yard' ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-400' : 'border-transparent text-slate-500'}`}><CheckCircle2 className="w-5 h-5 mb-1" /><span className="text-[8px] font-extrabold uppercase">Pátio</span></button>
       </nav>
 
-      <main className="flex-1 overflow-hidden p-3 sm:p-4 relative">
+      <main className="flex-1 overflow-hidden p-3 sm:p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 h-full max-w-[1600px] mx-auto w-full">
-          {renderColumn('PLANEJAMENTO', 'planning', Calendar, 'border-slate-500/30')}
-          {renderColumn('EM TRÂNSITO', 'transit', Ship, 'border-cyan-500/30')}
-          {renderColumn('PÁTIO / ENTREGUE', 'yard', CheckCircle2, 'border-emerald-500/30')}
+          {renderColumn('PLANEJAMENTO', 'planning', Calendar)}
+          {renderColumn('EM TRÂNSITO', 'transit', Ship)}
+          {renderColumn('PÁTIO / ENTREGUE', 'yard', CheckCircle2)}
         </div>
       </main>
 
       <RegisterModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} container={selectedContainer} onSave={handleSaveModalData} isSaving={isSaving} mode={modalMode} />
+      <DetailsModal isOpen={isDetailsOpen} onClose={() => setIsDetailsOpen(false)} container={selectedContainer} />
       <CreateModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSave={handleCreateContainer} isSaving={isSaving} existingContainers={containers} />
       <PasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} onSuccess={() => setViewMode('admin')} />
     </div>

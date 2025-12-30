@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   Calendar, 
@@ -8,7 +9,8 @@ import {
   Flag,
   Clock,
   Box,
-  Zap
+  Zap,
+  ChevronRight
 } from 'lucide-react';
 import { Container } from '../types';
 
@@ -17,10 +19,10 @@ interface ContainerCardProps {
   onDelete: (id: string) => void;
   onRegisterShipment: (id: string) => void;
   onReceive: (id: string) => void;
+  onViewDetails: (id: string) => void; // Nova prop
   isAdmin?: boolean;
 }
 
-// Helper para obter a semana ISO
 const getISOWeek = (date: Date) => {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -29,11 +31,9 @@ const getISOWeek = (date: Date) => {
   return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
-// Helper para formatar data BR (dd/mm)
 const formatDateBR = (dateVal: any, showYear = false) => {
   if (!dateVal) return "N/D";
   const s = String(dateVal).split('T')[0].trim();
-  
   if (s.includes('-')) {
     const [y, m, d] = s.split('-');
     return showYear ? `${d}/${m}/${y.slice(2)}` : `${d}/${m}`;
@@ -45,22 +45,17 @@ const formatDateBR = (dateVal: any, showYear = false) => {
   return s; 
 };
 
-// Helper para parse seguro de data
 const parseDate = (dateStr: any) => {
   if (!dateStr) return null;
   const s = String(dateStr).trim();
   if (s.includes('-')) {
     const clean = s.split('T')[0];
     const parts = clean.split('-');
-    if(parts.length >= 3) {
-        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0);
-    }
+    if(parts.length >= 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), 12, 0, 0);
   }
   if (s.includes('/')) {
     const parts = s.split('/');
-    if(parts.length >= 3) {
-        return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 12, 0, 0);
-    }
+    if(parts.length >= 3) return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), 12, 0, 0);
   }
   return null;
 };
@@ -70,6 +65,7 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
   onDelete, 
   onRegisterShipment, 
   onReceive,
+  onViewDetails,
   isAdmin 
 }) => {
   const isTransit = container.status === 'transit';
@@ -84,7 +80,6 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
   const pickupDate = parseDate(container.date_pickup || container['Data Coleta']);
   const arrivalDate = container.date_arrival_forecast || container['Data Chegada'];
 
-  // Lógica de Status (Atraso/Antecipação)
   let deviationType: 'none' | 'early' | 'late' = 'none';
   if ((isTransit || isDelivered) && pickupDate && start && end) {
       const pTime = new Date(pickupDate).setHours(0,0,0,0);
@@ -96,14 +91,12 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
       deviationType = 'late';
   }
 
-  // Lógica para Alerta de Semana de Coleta (Usa a data final se estiver em planejamento)
   const relevantDateForWeek = isPlanning ? end : pickupDate;
   const isCollectWeek = relevantDateForWeek && 
     getISOWeek(relevantDateForWeek) === getISOWeek(today) && 
     relevantDateForWeek.getFullYear() === today.getFullYear() &&
     !isDelivered;
 
-  // Styles de borda e sombra
   let wrapperGradient = '';
   let shadowClass = '';
 
@@ -125,10 +118,7 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
 
   const supplierUpper = container.supplier?.toUpperCase() || '';
   let headerStyle = {
-    bg: 'bg-transparent',
-    text: 'text-slate-100',
-    subText: 'text-slate-500',
-    border: 'border-b border-transparent'
+    bg: 'bg-transparent', text: 'text-slate-100', subText: 'text-slate-500', border: 'border-b border-transparent'
   };
 
   if (supplierUpper.includes('CAVACOS')) {
@@ -137,175 +127,87 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
     headerStyle = { bg: 'bg-emerald-500/10', text: 'text-emerald-400', subText: 'text-emerald-500/60', border: 'border-b border-emerald-500/20' };
   }
 
-  const validItems = container.items?.filter(i => i.desc && i.desc.trim() !== '') || [];
-  const displayItems = validItems.slice(0, 3);
-  
-  // Handlers
-  const handleEditClick = (e: React.MouseEvent) => {
-      if (!isAdmin) return;
-      onRegisterShipment(container.id);
-  };
-
-  const handleBtnReceive = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      onReceive(container.id);
-  };
-
-  const handleBtnDelete = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      onDelete(container.id);
-  };
-
-  const handleBtnEdit = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      onRegisterShipment(container.id);
-  };
+  const programmedItems = container.items?.filter(i => !i.isExtra && i.desc && i.desc.trim() !== '') || [];
+  const extraItemsCount = container.items?.filter(i => i.isExtra).length || 0;
 
   return (
-    <div className={`relative rounded-xl transition-all duration-300 group ${shadowClass} p-[1.5px] overflow-visible`}>
+    <div 
+      className={`relative rounded-xl transition-all duration-300 group ${shadowClass} p-[1.5px] overflow-visible cursor-pointer active:scale-[0.98]`}
+      onClick={() => onViewDetails(container.id)}
+    >
         <div className={`absolute inset-0 ${wrapperGradient} rounded-xl`} style={{ zIndex: 0 }} />
-
         <div className="relative z-10 flex flex-col w-full bg-slate-900 rounded-[10px] overflow-hidden">
-            
-            {/* ZONA 1: Cabeçalho com Badges */}
-            <div 
-                onClick={handleEditClick}
-                className={`px-3 py-2.5 flex justify-between items-start ${headerStyle.bg} ${headerStyle.border} ${isAdmin ? 'cursor-pointer' : ''}`}
-            >
+            <div className={`px-3 py-2.5 flex justify-between items-start ${headerStyle.bg} ${headerStyle.border}`}>
                 <div className="overflow-hidden">
-                    <h3 className={`text-sm font-extrabold uppercase tracking-wide leading-tight truncate ${headerStyle.text}`} title={container.supplier}>
-                        {container.supplier}
-                    </h3>
-                    <span className={`text-[10px] font-mono font-bold block mt-0.5 truncate ${headerStyle.subText}`} title={container.id}>
-                        {container.id}
-                    </span>
+                    <h3 className={`text-sm font-extrabold uppercase tracking-wide leading-tight truncate ${headerStyle.text}`} title={container.supplier}>{container.supplier}</h3>
+                    <span className={`text-[10px] font-mono font-bold block mt-0.5 truncate ${headerStyle.subText}`} title={container.id}>{container.id}</span>
                 </div>
-                
                 <div className="shrink-0 pl-2 flex flex-col items-end gap-1">
-                    {deviationType === 'late' && (
-                        <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse">
-                            <AlertTriangle className="w-2.5 h-2.5" /> ATRASADO
-                        </div>
-                    )}
-                    {deviationType === 'early' && (
-                        <div className="flex items-center gap-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                            <Zap className="w-2.5 h-2.5" /> ANTECIPADO
-                        </div>
-                    )}
-                    {isCollectWeek && deviationType === 'none' && (
-                        <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                            <Clock className="w-2.5 h-2.5" /> NA SEMANA
-                        </div>
-                    )}
+                    {deviationType === 'late' && <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse"><AlertTriangle className="w-2.5 h-2.5" /> ATRASADO</div>}
+                    {deviationType === 'early' && <div className="flex items-center gap-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold"><Zap className="w-2.5 h-2.5" /> ANTECIPADO</div>}
+                    {isCollectWeek && deviationType === 'none' && <div className="flex items-center gap-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold"><Clock className="w-2.5 h-2.5" /> NA SEMANA</div>}
                 </div>
             </div>
 
-            {/* ZONA 2: Corpo */}
-            <div 
-                onClick={handleEditClick}
-                className={`px-3 pt-1.5 pb-2 flex-1 flex flex-col gap-2 ${isAdmin ? 'cursor-pointer' : ''}`}
-            >
-                <div className="space-y-1.5">
-                    {displayItems.length > 0 ? displayItems.map((item, idx) => {
+            <div className="px-3 pt-1.5 pb-2 flex-1 flex flex-col gap-1.5">
+                <div className="space-y-1">
+                    {programmedItems.map((item, idx) => {
                         const hasReal = !!item.real;
                         return (
-                            <div key={idx} className={`
-                                p-2 rounded border flex flex-col gap-1.5 transition-colors
-                                ${hasReal ? 'bg-amber-400/05 border-amber-500/30' : 'bg-slate-950/50 border-slate-800/50'}
-                            `}>
+                            <div key={idx} className={`p-2 rounded border flex flex-col gap-1 transition-colors ${hasReal ? 'bg-amber-400/05 border-amber-500/20' : 'bg-slate-950/50 border-slate-800/40'}`}>
                                 <div className="flex items-start gap-1.5">
                                     <Box className={`w-3 h-3 mt-0.5 shrink-0 ${hasReal ? 'text-amber-500/50' : 'text-slate-600'}`} />
-                                    <span className={`text-xs font-semibold leading-tight ${hasReal ? 'text-amber-100' : 'text-slate-200'}`}>
-                                        {item.desc}
-                                    </span>
+                                    <span className={`text-[11px] font-semibold leading-tight ${hasReal ? 'text-amber-100' : 'text-slate-300'}`}>{item.desc}</span>
                                 </div>
-                                <div className={`flex items-center justify-between pt-1.5 border-t ${hasReal ? 'border-amber-500/10' : 'border-slate-800/50'}`}>
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-[9px] uppercase font-bold text-slate-500">Solicitado:</span>
-                                        <span className="text-[10px] font-mono font-medium text-slate-300 bg-slate-800 px-1 py-0.5 rounded">{item.qtd || '-'}</span>
-                                    </div>
-                                    {hasReal && (
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-[9px] uppercase font-bold text-amber-500/80">{isDelivered ? "Real:" : "Embarcado:"}</span>
-                                            <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-900/20 border border-amber-500/20 px-1 py-0.5 rounded">{item.real}</span>
-                                        </div>
-                                    )}
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-800/50">
+                                    <div className="flex items-center gap-1"><span className="text-[8px] uppercase font-bold text-slate-500">Solicitado:</span><span className="text-[10px] font-mono text-slate-400">{item.qtd}</span></div>
+                                    {hasReal && <div className="flex items-center gap-1"><span className="text-[8px] uppercase font-bold text-amber-500/70">{isDelivered ? "Real:" : "Emb:"}</span><span className="text-[10px] font-mono font-bold text-amber-300">{item.real}</span></div>}
                                 </div>
                             </div>
                         );
-                    }) : (
-                        <div className="text-center py-1.5 text-slate-600 text-[10px] italic border border-dashed border-slate-800 rounded bg-slate-950/30">
-                            Sem itens
-                        </div>
-                    )}
+                    })}
                 </div>
+
+                {/* Resumo de Itens Extras - Visual Simplificado */}
+                {extraItemsCount > 0 && (
+                    <div className="flex items-center justify-between px-2 py-1.5 bg-amber-500/5 border border-amber-500/20 rounded-lg group/extra transition-all hover:bg-amber-500/10">
+                        <div className="flex items-center gap-2">
+                           <AlertTriangle className="w-3 h-3 text-amber-500" />
+                           <span className="text-[10px] font-bold text-amber-400 uppercase tracking-tight">+{extraItemsCount} Mat. Extras</span>
+                        </div>
+                        <span className="text-[9px] font-bold text-amber-600 uppercase flex items-center gap-0.5">Detalhes <ChevronRight className="w-2.5 h-2.5" /></span>
+                    </div>
+                )}
             </div>
 
-            {/* ZONA 3: Rodapé */}
             <div className="px-3 pb-2 mt-auto">
                 <div className="pt-1.5 flex flex-col gap-1 border-t border-slate-800/50 bg-slate-900">
                     <div className="flex items-end justify-between">
-                        <div onClick={handleEditClick} className={`flex-1 min-w-0 pr-1 ${isAdmin ? 'cursor-pointer' : ''}`}>
+                        <div className="flex-1 min-w-0 pr-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <div className="flex items-center gap-1 text-[10px] whitespace-nowrap">
                                     <Calendar className={`w-3 h-3 ${deviationType === 'late' ? 'text-rose-500' : 'text-slate-500'}`} />
-                                    <span className="font-bold text-slate-600 uppercase tracking-tight">
-                                        {isTransit || isDelivered ? "Coleta:" : "Prazo:"}
-                                    </span>
-                                    <span className={`font-mono font-bold ${deviationType === 'late' ? 'text-rose-400' : 'text-slate-400'}`}>
-                                        {isTransit || isDelivered 
-                                        ? formatDateBR(container.date_pickup || container['Data Coleta'])
-                                        : formatDateBR(container.date_end || container['Data Fim'])
-                                        }
-                                    </span>
+                                    <span className="font-bold text-slate-600 uppercase tracking-tight">{isTransit || isDelivered ? "Coleta:" : "Prazo:"}</span>
+                                    <span className={`font-mono font-bold ${deviationType === 'late' ? 'text-rose-400' : 'text-slate-400'}`}>{isTransit || isDelivered ? formatDateBR(container.date_pickup || container['Data Coleta']) : formatDateBR(container.date_end || container['Data Fim'])}</span>
                                 </div>
                                 <span className="text-slate-800 text-[9px]">|</span>
-                                <div className="flex items-center gap-1 text-[10px] whitespace-nowrap">
-                                    <span className="font-bold text-slate-600 uppercase tracking-tight">NF:</span>
-                                    <span className="font-mono text-slate-400">{container.nf || "-"}</span>
-                                </div>
+                                <div className="flex items-center gap-1 text-[10px] whitespace-nowrap"><span className="font-bold text-slate-600 uppercase tracking-tight">NF:</span><span className="font-mono text-slate-400">{container.nf || "-"}</span></div>
                             </div>
                         </div>
-
-                        {isAdmin && (
-                            <div className="flex items-center gap-1.5 shrink-0 relative" style={{ zIndex: 100 }}>
-                                <div className="flex items-center gap-0.5">
-                                    {isTransit && (
-                                        <button type="button" onClick={handleBtnEdit} className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors" title="Editar">
-                                            <Edit className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                    {(isPlanning || isTransit) && (
-                                        <button type="button" onClick={handleBtnDelete} className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors" title="Excluir">
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                                {isTransit && (
-                                    <button type="button" onClick={handleBtnReceive} className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-3 py-1.5 rounded shadow-lg shadow-emerald-900/20 transition-all active:translate-y-0.5 ml-0.5 cursor-pointer relative">
-                                        <CheckCircle2 className="w-3.5 h-3.5" />
-                                        <span>RECEBER</span>
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {isTransit && arrivalDate && (
-                            <div className="flex items-center gap-1 text-[10px] text-cyan-400 whitespace-nowrap">
-                                <Flag className="w-3 h-3" />
-                                <span className="font-bold text-cyan-600/70 uppercase tracking-tight">Prev:</span>
-                                <span className="font-mono font-bold">{formatDateBR(arrivalDate)}</span>
-                            </div>
-                        )}
-                        {isDelivered && arrivalDate && (
-                            <div className="flex items-center gap-1 text-[10px] text-emerald-400 whitespace-nowrap">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                <span className="font-bold text-emerald-600/70 uppercase tracking-tight">Recebido:</span>
-                                <span className="font-mono font-bold">{formatDateBR(arrivalDate)}</span>
-                            </div>
-                        )}
+                        
+                        <div className="flex items-center gap-1 shrink-0">
+                            {isAdmin && (
+                                <>
+                                    {isTransit && <button onClick={(e) => { e.stopPropagation(); onRegisterShipment(container.id); }} className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"><Edit className="w-3.5 h-3.5" /></button>}
+                                    {(isPlanning || isTransit) && <button onClick={(e) => { e.stopPropagation(); onDelete(container.id); }} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
+                                </>
+                            )}
+                            {isAdmin && isTransit && (
+                                <button onClick={(e) => { e.stopPropagation(); onReceive(container.id); }} className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold px-2.5 py-1.5 rounded shadow-lg shadow-emerald-900/20 transition-all active:translate-y-0.5 ml-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" /><span>RECEBER</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
