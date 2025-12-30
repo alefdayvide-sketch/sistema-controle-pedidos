@@ -101,9 +101,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 overflow-y-auto md:overflow-hidden custom-scrollbar">
-      {/* Header Fixo/Sticky: Z-index alto para ficar sobre o scroll */}
-      <div className="sticky top-0 z-50 p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur flex items-center justify-between shrink-0 shadow-xl">
+    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden">
+      {/* Header Fixo */}
+      <div className="p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur flex items-center justify-between shrink-0 shadow-xl z-20">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
             <ChevronLeft className="w-5 h-5 text-slate-400" />
@@ -127,14 +127,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-visible md:overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         
-        {/* Sidebar Fornecedores: touch-pan-y adicionado para não travar o scroll vertical no mobile */}
-        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 shrink-0 bg-slate-900/20 md:overflow-y-auto custom-scrollbar">
+        {/* Sidebar Fornecedores: Rolagem independente */}
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 shrink-0 bg-slate-900/20 overflow-x-auto md:overflow-y-auto custom-scrollbar">
           <div className="p-4 border-b border-slate-800 hidden md:block">
             <h3 className="text-[10px] font-bold text-slate-500 uppercase">Fornecedores</h3>
           </div>
-          <div className="p-2 flex md:flex-col overflow-x-auto md:overflow-x-visible gap-1 no-scrollbar md:space-y-1 touch-pan-y">
+          <div className="p-2 flex md:flex-col gap-1 md:space-y-1">
             {suppliers.map(s => (
               <button
                 key={s}
@@ -148,10 +148,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
           </div>
         </div>
 
-        {/* Área de Gráficos e Tabelas */}
-        <div className="flex-1 md:overflow-y-auto p-4 md:p-6 custom-scrollbar pb-32">
+        {/* Área de Conteúdo: Rolagem interna crucial para não cortar o final */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-24">
           {!selectedSupplier ? (
-            <div className="py-20 md:h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50">
+            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 py-20">
               <Package className="w-16 h-16" />
               <p className="font-bold uppercase text-sm text-center">Selecione um fornecedor</p>
             </div>
@@ -225,6 +225,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                 </div>
               </div>
 
+              {/* Seção de Detalhamento de Extras - Mantida integralmente */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                 <div className="p-4 border-b border-slate-800 bg-slate-950/30 flex justify-between items-center">
                   <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
@@ -232,7 +233,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                   </h3>
                   <div className="flex items-center gap-2 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
                     <Scale className="w-3.5 h-3.5 text-rose-500" />
-                    <span className="text-rose-400 text-[10px] font-bold uppercase tracking-tight">Total: {stats.totalExtraM3.toFixed(3)} m³</span>
+                    <span className="text-rose-400 text-[10px] font-bold uppercase tracking-tight">TOTAL: {stats.totalExtraM3.toFixed(3)} M³</span>
                   </div>
                 </div>
                 
@@ -270,6 +271,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                 </div>
               </div>
               
+              {/* Caixa de Info Final - Mantida integralmente */}
               <div className="bg-cyan-500/5 border border-cyan-500/10 p-4 rounded-xl flex items-start gap-3">
                  <Info className="w-5 h-5 text-cyan-500 shrink-0 mt-0.5" />
                  <p className="text-[10px] text-cyan-400/80 font-medium italic leading-relaxed">

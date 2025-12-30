@@ -10,7 +10,8 @@ import {
   Clock,
   Box,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Ship
 } from 'lucide-react';
 import { Container } from '../types';
 
@@ -183,7 +184,7 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
             <div className="px-3 pb-2 mt-auto">
                 <div className="pt-1.5 flex flex-col gap-1 border-t border-slate-800/50 bg-slate-900">
                     <div className="flex items-end justify-between">
-                        <div className="flex-1 min-w-0 pr-1">
+                        <div className="flex-1 min-0 pr-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                                 <div className="flex items-center gap-1 text-[10px] whitespace-nowrap">
                                     <Calendar className={`w-3 h-3 ${deviationType === 'late' ? 'text-rose-500' : 'text-slate-500'}`} />
@@ -198,8 +199,24 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                         <div className="flex items-center gap-1 shrink-0">
                             {isAdmin && (
                                 <>
-                                    {isTransit && <button onClick={(e) => { e.stopPropagation(); onRegisterShipment(container.id); }} className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"><Edit className="w-3.5 h-3.5" /></button>}
-                                    {(isPlanning || isTransit) && <button onClick={(e) => { e.stopPropagation(); onDelete(container.id); }} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
+                                    {isPlanning && (
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); onRegisterShipment(container.id); }} 
+                                        className="flex items-center gap-1 bg-cyan-600 hover:bg-cyan-500 text-white text-[9px] font-bold px-2.5 py-1.5 rounded shadow-lg shadow-cyan-900/20 transition-all active:translate-y-0.5"
+                                      >
+                                        <Ship className="w-3.5 h-3.5" /><span>EMBARCAR</span>
+                                      </button>
+                                    )}
+                                    {isTransit && (
+                                      <button onClick={(e) => { e.stopPropagation(); onRegisterShipment(container.id); }} className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors">
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {(isPlanning || isTransit) && (
+                                      <button onClick={(e) => { e.stopPropagation(); onDelete(container.id); }} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                 </>
                             )}
                             {isAdmin && isTransit && (
