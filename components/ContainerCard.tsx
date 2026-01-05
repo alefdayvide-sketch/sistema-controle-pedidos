@@ -193,6 +193,15 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                                 </div>
                                 <span className="text-slate-800 text-[9px]">|</span>
                                 <div className="flex items-center gap-1 text-[10px] whitespace-nowrap"><span className="font-bold text-slate-600 uppercase tracking-tight">NF:</span><span className="font-mono text-slate-400">{container.nf || "-"}</span></div>
+                                {(isTransit || isDelivered) && container.date_arrival_forecast && (
+                                  <>
+                                    <span className="text-slate-800 text-[9px]">|</span>
+                                    <div className="flex items-center gap-1 text-[10px] whitespace-nowrap">
+                                      <span className="font-bold text-slate-600 uppercase tracking-tight">Chegada:</span>
+                                      <span className="font-mono font-bold text-cyan-400">{formatDateBR(container.date_arrival_forecast || container['Data Chegada'])}</span>
+                                    </div>
+                                  </>
+                                )}
                             </div>
                         </div>
                         
