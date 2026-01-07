@@ -8,7 +8,8 @@ import {
   LogOut,
   LogIn,
   BarChart3,
-  Ship
+  Ship,
+  Filter
 } from 'lucide-react';
 import ContainerCard from './components/ContainerCard';
 import RegisterModal from './components/RegisterModal';
@@ -34,6 +35,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'ops' | 'dashboard'>('ops');
   const [activeTab, setActiveTab] = useState<'planning' | 'transit' | 'yard'>('planning');
   const [viewMode, setViewMode] = useState<'director' | 'admin'>(() => (localStorage.getItem('viewMode') as 'director' | 'admin') || 'director');
+  const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>('TODOS');
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -111,6 +113,17 @@ const App: React.FC = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Lógica de Filtros
+  const suppliersList = useMemo(() => {
+    const s = new Set(containers.map(c => c.supplier).filter(Boolean));
+    return ['TODOS', ...Array.from(s).sort()];
+  }, [containers]);
+
+  const filteredContainers = useMemo(() => {
+    if (selectedSupplierFilter === 'TODOS') return containers;
+    return containers.filter(c => c.supplier === selectedSupplierFilter);
+  }, [containers, selectedSupplierFilter]);
 
   const handleSaveModalData = async (id: string, formData: ShipmentFormData, isReceive: boolean) => {
     setIsSaving(true);
@@ -210,7 +223,7 @@ const App: React.FC = () => {
   const selectedContainer = containers?.find(c => c.id === selectedContainerId);
 
   const renderColumn = (title: string, status: 'planning' | 'transit' | 'yard', Icon: React.ElementType) => {
-    let items = containers.filter(c => c.status === status);
+    let items = filteredContainers.filter(c => c.status === status);
     if (status === 'planning') items.sort((a, b) => (a.date_end || '').localeCompare(b.date_end || ''));
     const isHiddenOnMobile = activeTab !== status;
 
@@ -277,6 +290,29 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* Barra de Filtro de Fornecedor */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center gap-3 overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+           <Filter className="w-3 h-3 text-slate-500" />
+           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-1">Fornecedor:</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {suppliersList.map(sup => (
+            <button
+              key={sup}
+              onClick={() => setSelectedSupplierFilter(sup)}
+              className={`px-3 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border ${
+                selectedSupplierFilter === sup 
+                ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-900/20' 
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+              }`}
+            >
+              {sup}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <nav className="flex md:hidden bg-slate-900 border-b border-slate-800 px-2 py-2 shrink-0 z-10 gap-1.5">
         <button onClick={() => setActiveTab('planning')} className={`flex-1 flex flex-col items-center justify-center py-2.5 rounded-xl border ${activeTab === 'planning' ? 'bg-slate-800 border-slate-600 text-white' : 'border-transparent text-slate-500'}`}><Calendar className="w-5 h-5 mb-1" /><span className="text-[8px] font-extrabold uppercase">Planejamento</span></button>

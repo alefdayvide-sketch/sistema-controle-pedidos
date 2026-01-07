@@ -11,7 +11,8 @@ import {
   User,
   TrendingUp,
   Scale,
-  Info
+  Info,
+  ChevronRight
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -25,6 +26,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  const [currentYear, currentMonthNum] = useMemo(() => {
+    const [y, m] = selectedMonth.split('-');
+    return [parseInt(y), parseInt(m)];
+  }, [selectedMonth]);
 
   const calculateVolumeFromDesc = (item: ContainerItem): number => {
     if (item.m3) {
@@ -94,17 +100,22 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
     };
   }, [supplierData]);
 
-  const formatMonth = (m: string) => {
-    const [y, mm] = m.split('-');
-    const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-    return `${months[parseInt(mm) - 1]} / ${y}`;
+  const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+  const changeYear = (delta: number) => {
+    const newYear = currentYear + delta;
+    setSelectedMonth(`${newYear}-${String(currentMonthNum).padStart(2, '0')}`);
+  };
+
+  const selectMonthIdx = (idx: number) => {
+    setSelectedMonth(`${currentYear}-${String(idx + 1).padStart(2, '0')}`);
   };
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 overflow-hidden">
-      {/* Header Fixo */}
-      <div className="p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur flex items-center justify-between shrink-0 shadow-xl z-20">
-        <div className="flex items-center gap-3">
+      {/* Header Fixo com Seletor de Data Customizado */}
+      <div className="p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between shrink-0 shadow-xl z-20 gap-4 sm:gap-0">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
             <ChevronLeft className="w-5 h-5 text-slate-400" />
           </button>
@@ -116,14 +127,28 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-slate-500 hidden xs:block" />
-          <input 
-            type="month" 
-            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white [color-scheme:dark] outline-none focus:border-cyan-500"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-          />
+        {/* Seletor Customizado: Ano e Meses */}
+        <div className="bg-slate-950/50 p-1.5 rounded-2xl border border-slate-800 flex flex-col gap-1.5 w-full sm:w-auto max-w-sm sm:max-w-none">
+          <div className="flex items-center justify-between px-2">
+             <button onClick={() => changeYear(-1)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-all"><ChevronLeft className="w-4 h-4" /></button>
+             <span className="text-xs font-black text-white tracking-widest">{currentYear}</span>
+             <button onClick={() => changeYear(1)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-all"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 px-1">
+            {months.map((m, idx) => (
+              <button
+                key={m}
+                onClick={() => selectMonthIdx(idx)}
+                className={`text-[9px] font-bold py-1.5 px-2 rounded-lg transition-all border ${
+                  currentMonthNum === idx + 1 
+                  ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-900/30' 
+                  : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -165,7 +190,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                 </div>
                 <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl">
                   <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Referência</p>
-                  <p className="text-lg font-bold text-cyan-400 uppercase">{formatMonth(selectedMonth)}</p>
+                  <p className="text-lg font-bold text-cyan-400 uppercase">{months[currentMonthNum - 1]} / {currentYear}</p>
                   <p className="text-[10px] text-slate-600 font-medium mt-1 uppercase">Competência</p>
                 </div>
                 <div className="bg-rose-500/5 border border-rose-500/20 p-4 rounded-2xl relative overflow-hidden group">
@@ -225,7 +250,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                 </div>
               </div>
 
-              {/* Seção de Detalhamento de Extras - Mantida integralmente */}
+              {/* Seção de Detalhamento de Extras */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
                 <div className="p-4 border-b border-slate-800 bg-slate-950/30 flex justify-between items-center">
                   <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
@@ -271,7 +296,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                 </div>
               </div>
               
-              {/* Caixa de Info Final - Mantida integralmente */}
               <div className="bg-cyan-500/5 border border-cyan-500/10 p-4 rounded-xl flex items-start gap-3">
                  <Info className="w-5 h-5 text-cyan-500 shrink-0 mt-0.5" />
                  <p className="text-[10px] text-cyan-400/80 font-medium italic leading-relaxed">
