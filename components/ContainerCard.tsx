@@ -20,7 +20,7 @@ interface ContainerCardProps {
   onDelete: (id: string) => void;
   onRegisterShipment: (id: string) => void;
   onReceive: (id: string) => void;
-  onViewDetails: (id: string) => void; // Nova prop
+  onViewDetails: (id: string) => void;
   isAdmin?: boolean;
 }
 
@@ -79,13 +79,12 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
   const start = parseDate(container.date_start || container['Data Inicio']);
   const end = parseDate(container.date_end || container['Data Fim']);
   const pickupDate = parseDate(container.date_pickup || container['Data Coleta']);
-  const arrivalDate = container.date_arrival_forecast || container['Data Chegada'];
 
   let deviationType: 'none' | 'early' | 'late' = 'none';
   if ((isTransit || isDelivered) && pickupDate && start && end) {
       const pTime = new Date(pickupDate).setHours(0,0,0,0);
-      const sTime = new Date(start).setHours(0,0,0,0);
       const eTime = new Date(end).setHours(0,0,0,0);
+      const sTime = new Date(start).setHours(0,0,0,0);
       if (pTime > eTime) deviationType = 'late';
       else if (pTime < sTime) deviationType = 'early';
   } else if (isPlanning && end && today.getTime() > end.getTime()) {
@@ -169,7 +168,6 @@ const ContainerCard: React.FC<ContainerCardProps> = ({
                     })}
                 </div>
 
-                {/* Resumo de Itens Extras - Visual Simplificado */}
                 {extraItemsCount > 0 && (
                     <div className="flex items-center justify-between px-2 py-1.5 bg-amber-500/5 border border-amber-500/20 rounded-lg group/extra transition-all hover:bg-amber-500/10">
                         <div className="flex items-center gap-2">
