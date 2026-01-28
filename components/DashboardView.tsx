@@ -158,14 +158,17 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
             margin: 0;
             padding: 0;
           }
-          .bg-slate-950, .bg-slate-900, .bg-slate-900/50, .bg-slate-950/30 { background: #fff !important; }
-          .text-white, .text-slate-300, .text-slate-400, .text-slate-500 { color: #000 !important; }
-          .border-slate-800, .border-slate-700 { border-color: #eee !important; }
+          .bg-slate-950, .bg-slate-900, .bg-slate-900/50, .bg-slate-950/30, .bg-slate-950/50, .bg-amber-500/5, .bg-rose-500/5 { background: #fff !important; }
+          .text-white, .text-slate-300, .text-slate-400, .text-slate-500, .text-rose-300, .text-rose-400, .text-amber-400, .text-amber-100 { color: #000 !important; }
+          .border-slate-800, .border-slate-700, .border-amber-500/20, .border-rose-500/20 { border-color: #eee !important; border-width: 1px !important; }
           .shadow-2xl, .shadow-xl { box-shadow: none !important; }
+          .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 8px !important; overflow: visible !important; }
           table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 20px; page-break-inside: auto; }
           tr { page-break-inside: avoid; page-break-after: auto; }
           th, td { border: 1px solid #ddd !important; padding: 12px 8px !important; color: black !important; text-align: left; }
           .max-w-6xl { max-width: 100% !important; padding: 0 !important; }
+          .grid { display: block !important; }
+          .grid > div { margin-bottom: 15px; page-break-inside: avoid; }
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -207,7 +210,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                   className={`text-[9px] font-black px-3 py-1.5 rounded-xl transition-all shrink-0 ${
                     selectedMonthNum === idx + 1 
                     ? 'bg-[#0891b2] text-white shadow-lg' 
-                    : 'bg-transparent text-slate-600 hover:text-slate-400'
+                    : 'bg-transparent text-slate-600 hover:text-slate-300'
                   }`}
                 >
                   {m}
