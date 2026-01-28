@@ -4,15 +4,15 @@ import { Container, ContainerItem } from '../types';
 import { 
   BarChart3, 
   ChevronLeft, 
-  Calendar, 
+  ChevronRight,
   Package, 
-  AlertCircle, 
   CheckCircle2, 
-  User,
   TrendingUp,
   Scale,
-  Info,
-  ChevronRight
+  AlertTriangle,
+  Layers,
+  Calculator,
+  Printer
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -21,286 +21,356 @@ interface DashboardViewProps {
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => {
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  const [selectedMonthNum, setSelectedMonthNum] = useState<number>(now.getMonth() + 1);
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
 
-  const [currentYear, currentMonthNum] = useMemo(() => {
-    const [y, m] = selectedMonth.split('-');
-    return [parseInt(y), parseInt(m)];
-  }, [selectedMonth]);
+  const normalizeName = (name: string) => name.trim().toUpperCase();
 
   const calculateVolumeFromDesc = (item: ContainerItem): number => {
     if (item.m3) {
-      const manualM3 = parseFloat(item.m3.replace(',', '.'));
+      const manualM3 = parseFloat(String(item.m3).replace(',', '.'));
       if (!isNaN(manualM3)) return manualM3;
     }
-
     const regex = /(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)/;
     const match = item.desc.match(regex);
-
     if (match) {
       const d1 = parseFloat(match[1].replace(',', '.')) / 1000;
       const d2 = parseFloat(match[2].replace(',', '.')) / 1000;
       const d3 = parseFloat(match[3].replace(',', '.')) / 1000;
-      const qtd = parseFloat(item.qtd) || 0;
+      const qtd = parseFloat(item.real || item.qtd) || 0;
       return d1 * d2 * d3 * qtd;
     }
-
     return 0;
   };
 
   const suppliers = useMemo(() => {
-    const list = Array.from(new Set(containers.map(c => c.supplier))).filter(Boolean);
+    const list = Array.from(new Set(containers.map(c => c.supplier))).filter(Boolean).sort();
     if (list.length > 0 && !selectedSupplier) setSelectedSupplier(list[0]);
     return list;
   }, [containers, selectedSupplier]);
 
   const supplierData = useMemo(() => {
     if (!selectedSupplier) return [];
-    
     return containers.filter(c => {
       const dateStr = c.date_start || c.date_pickup || '';
       if (!dateStr) return false;
-      const [y, m] = dateStr.split('-');
-      return c.supplier === selectedSupplier && `${y}-${m}` === selectedMonth;
+      
+      let y, m;
+      if (dateStr.includes('-')) {
+        [y, m] = dateStr.split('-');
+      } else if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        y = parts[2];
+        m = parts[1];
+      } else {
+        return false;
+      }
+      
+      return c.supplier === selectedSupplier && parseInt(y) === selectedYear && parseInt(m) === selectedMonthNum;
     });
-  }, [containers, selectedSupplier, selectedMonth]);
+  }, [containers, selectedSupplier, selectedYear, selectedMonthNum]);
 
   const stats = useMemo(() => {
-    const summary: Record<string, { requested: number, shipped: number, name: string }> = {};
-    const extraItems: (ContainerItem & { calculatedM3: number })[] = [];
-    let totalExtraM3 = 0;
+    const plannedItemsMap: Record<string, { requested: number, shipped: number, name: string, unitM3: number }> = {};
+    const outsideItems: (ContainerItem & { calculatedM3: number })[] = [];
+    
+    supplierData.forEach(c => {
+      c.items?.filter(i => !i.isExtra).forEach(item => {
+        const key = normalizeName(item.desc);
+        if (!plannedItemsMap[key]) {
+          const unitVol = calculateVolumeFromDesc({ ...item, qtd: '1', real: '1' });
+          plannedItemsMap[key] = { requested: 0, shipped: 0, name: item.desc, unitM3: unitVol };
+        }
+        plannedItemsMap[key].requested += parseFloat(item.qtd) || 0;
+      });
+    });
 
     supplierData.forEach(c => {
       c.items?.forEach(item => {
-        if (item.isExtra) {
+        const key = normalizeName(item.desc);
+        const shippedQty = parseFloat(item.real || '0');
+        
+        if (plannedItemsMap[key]) {
+          plannedItemsMap[key].shipped += shippedQty;
+        } else if (shippedQty > 0) {
           const m3 = calculateVolumeFromDesc(item);
-          extraItems.push({ ...item, calculatedM3: m3 });
-          totalExtraM3 += m3;
-        } else {
-          const req = parseFloat(item.qtd) || 0;
-          const real = parseFloat(item.real) || 0;
-          if (!summary[item.desc]) {
-            summary[item.desc] = { requested: 0, shipped: 0, name: item.desc };
-          }
-          summary[item.desc].requested += req;
-          summary[item.desc].shipped += real;
+          outsideItems.push({ ...item, calculatedM3: m3 });
         }
       });
     });
 
+    let surplusM3 = 0;
+    let outsideM3 = 0;
+
+    const plannedResults = Object.values(plannedItemsMap).map(item => {
+      const diff = item.shipped - item.requested;
+      if (diff > 0) {
+        surplusM3 += diff * item.unitM3;
+      }
+      return { ...item, diff };
+    });
+
+    outsideItems.forEach(item => {
+      outsideM3 += item.calculatedM3;
+    });
+
     return { 
-      items: Object.values(summary),
-      extras: extraItems,
-      totalExtraM3,
+      plannedList: plannedResults,
+      outsideList: outsideItems,
+      surplusM3,
+      outsideM3,
+      totalImpactM3: surplusM3 + outsideM3,
       totalOrders: supplierData.length 
     };
   }, [supplierData]);
 
   const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
-  const changeYear = (delta: number) => {
-    const newYear = currentYear + delta;
-    setSelectedMonth(`${newYear}-${String(currentMonthNum).padStart(2, '0')}`);
+  const handlePrint = () => {
+    window.print();
   };
 
-  const selectMonthIdx = (idx: number) => {
-    setSelectedMonth(`${currentYear}-${String(idx + 1).padStart(2, '0')}`);
+  const changeYear = (delta: number) => {
+    setSelectedYear(prev => prev + delta);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden">
-      {/* Header Fixo com Seletor de Data Customizado */}
-      <div className="p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between shrink-0 shadow-xl z-20 gap-4 sm:gap-0">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-            <ChevronLeft className="w-5 h-5 text-slate-400" />
+    <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans">
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body, html, #root { 
+            height: auto !important; 
+            overflow: visible !important; 
+            background: white !important; 
+            color: black !important; 
+          }
+          .flex-1 { height: auto !important; overflow: visible !important; }
+          .print-area { 
+            position: relative !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            color: black !important;
+            margin: 0;
+            padding: 0;
+          }
+          .bg-slate-950, .bg-slate-900, .bg-slate-900/50, .bg-slate-950/30 { background: #fff !important; }
+          .text-white, .text-slate-300, .text-slate-400, .text-slate-500 { color: #000 !important; }
+          .border-slate-800, .border-slate-700 { border-color: #eee !important; }
+          .shadow-2xl, .shadow-xl { box-shadow: none !important; }
+          table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 20px; page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          th, td { border: 1px solid #ddd !important; padding: 12px 8px !important; color: black !important; text-align: left; }
+          .max-w-6xl { max-width: 100% !important; padding: 0 !important; }
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+
+      {/* Header Compacto */}
+      <div className="p-4 border-b border-slate-800/60 bg-[#020617] flex flex-col sm:flex-row items-center justify-between shrink-0 z-20 gap-4 sm:gap-0 no-print">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-slate-800 rounded-lg transition-all active:scale-90 group">
+            <ChevronLeft className="w-5 h-5 text-slate-500 group-hover:text-white" />
           </button>
-          <div>
-            <h2 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-cyan-400" /> Indicadores
-            </h2>
-            <p className="hidden md:block text-[10px] text-slate-500 uppercase font-bold tracking-wider">Acuracidade e Desperdício Logístico</p>
+          <div className="flex items-center gap-3">
+            <BarChart3 className="w-6 h-6 text-cyan-400" />
+            <div>
+              <h2 className="text-xl font-black text-white uppercase tracking-tight leading-none">Indicadores</h2>
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Acuracidade e Desperdício Logístico</p>
+            </div>
           </div>
         </div>
         
-        {/* Seletor Customizado: Ano e Meses */}
-        <div className="bg-slate-950/50 p-1.5 rounded-2xl border border-slate-800 flex flex-col gap-1.5 w-full sm:w-auto max-w-sm sm:max-w-none">
-          <div className="flex items-center justify-between px-2">
-             <button onClick={() => changeYear(-1)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-all"><ChevronLeft className="w-4 h-4" /></button>
-             <span className="text-xs font-black text-white tracking-widest">{currentYear}</span>
-             <button onClick={() => changeYear(1)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-all"><ChevronRight className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 px-1">
-            {months.map((m, idx) => (
-              <button
-                key={m}
-                onClick={() => selectMonthIdx(idx)}
-                className={`text-[9px] font-bold py-1.5 px-2 rounded-lg transition-all border ${
-                  currentMonthNum === idx + 1 
-                  ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-900/30' 
-                  : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
-                }`}
-              >
-                {m}
+        <div className="flex items-center gap-4">
+          {/* SELETOR COMPACTO */}
+          <div className="bg-[#0f172a]/40 p-2.5 rounded-3xl border border-slate-800/50 flex flex-col items-center min-w-[340px]">
+            <div className="flex items-center justify-between w-full px-4 mb-1.5">
+              <button onClick={() => changeYear(-1)} className="text-slate-600 hover:text-white transition-colors">
+                <ChevronLeft className="w-4 h-4" />
               </button>
-            ))}
+              <span className="text-sm font-black text-white tracking-[0.2em]">{selectedYear}</span>
+              <button onClick={() => changeYear(1)} className="text-slate-600 hover:text-white transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full">
+              {months.map((m, idx) => (
+                <button
+                  key={m}
+                  onClick={() => setSelectedMonthNum(idx + 1)}
+                  className={`text-[9px] font-black px-3 py-1.5 rounded-xl transition-all shrink-0 ${
+                    selectedMonthNum === idx + 1 
+                    ? 'bg-[#0891b2] text-white shadow-lg' 
+                    : 'bg-transparent text-slate-600 hover:text-slate-400'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <button 
+            onClick={handlePrint}
+            className="p-3 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-xl transition-all border border-slate-700 shadow-lg active:scale-95"
+            title="Imprimir Relatório"
+          >
+            <Printer className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        
-        {/* Sidebar Fornecedores: Rolagem independente */}
-        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 shrink-0 bg-slate-900/20 overflow-x-auto md:overflow-y-auto custom-scrollbar">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden print-area">
+        {/* Sidebar */}
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 shrink-0 bg-slate-900/20 overflow-x-auto md:overflow-y-auto custom-scrollbar no-print">
           <div className="p-4 border-b border-slate-800 hidden md:block">
-            <h3 className="text-[10px] font-bold text-slate-500 uppercase">Fornecedores</h3>
+            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fornecedores Ativos</h3>
           </div>
-          <div className="p-2 flex md:flex-col gap-1 md:space-y-1">
+          <div className="p-2 flex md:flex-col gap-1">
             {suppliers.map(s => (
               <button
                 key={s}
                 onClick={() => setSelectedSupplier(s)}
-                className={`whitespace-nowrap md:whitespace-normal px-4 py-2.5 md:py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2 md:gap-3 border ${selectedSupplier === s ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}
+                className={`whitespace-nowrap md:whitespace-normal px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-3 border ${selectedSupplier === s ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 shadow-inner' : 'text-slate-500 border-transparent hover:bg-slate-800'}`}
               >
-                <User className="w-4 h-4 shrink-0" />
+                <div className={`w-1.5 h-1.5 rounded-full ${selectedSupplier === s ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`} />
                 <span className="truncate">{s}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Área de Conteúdo: Rolagem interna crucial para não cortar o final */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar pb-24">
+        {/* Relatório Principal */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar pb-32">
           {!selectedSupplier ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 py-20">
-              <Package className="w-16 h-16" />
-              <p className="font-bold uppercase text-sm text-center">Selecione um fornecedor</p>
+            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 py-20 no-print">
+              <Layers className="w-16 h-16 animate-pulse" />
+              <p className="font-black uppercase text-xs tracking-widest">Selecione um fornecedor para visualizar o balanço</p>
             </div>
           ) : (
-            <div className="space-y-6 max-w-5xl mx-auto">
+            <div className="space-y-6 max-w-6xl mx-auto">
+              
+              <div className="hidden print:flex flex-col gap-1 mb-8 border-b-2 border-black pb-4">
+                 <h1 className="text-2xl font-black uppercase">Relatório de Divergência Mensal</h1>
+                 <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-sm font-bold uppercase">Fornecedor: <span className="font-black">{selectedSupplier}</span></p>
+                      <p className="text-sm font-bold uppercase">Período: <span className="font-black">{months[selectedMonthNum-1]} / {selectedYear}</span></p>
+                    </div>
+                    <p className="text-[10px] font-mono text-slate-500 italic">Relatório gerado em {new Date().toLocaleDateString('pt-BR')}</p>
+                 </div>
+              </div>
+
+              {/* Métricas em Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl relative overflow-hidden">
-                  <Package className="absolute -right-4 -bottom-4 w-24 h-24 text-white/5" />
-                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Pedidos no Mês</p>
-                  <p className="text-3xl font-mono font-bold text-white">{stats.totalOrders}</p>
-                </div>
-                <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Referência</p>
-                  <p className="text-lg font-bold text-cyan-400 uppercase">{months[currentMonthNum - 1]} / {currentYear}</p>
-                  <p className="text-[10px] text-slate-600 font-medium mt-1 uppercase">Competência</p>
-                </div>
-                <div className="bg-rose-500/5 border border-rose-500/20 p-4 rounded-2xl relative overflow-hidden group">
-                   <TrendingUp className="absolute -right-4 -bottom-4 w-24 h-24 text-rose-500/5 transition-colors" />
-                  <p className="text-[10px] font-bold text-rose-500/60 uppercase mb-2">Volume Extra</p>
+                <div className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-3xl relative overflow-hidden">
+                  <TrendingUp className="absolute -right-4 -bottom-4 w-24 h-24 text-amber-500/10 no-print" />
+                  <p className="text-[10px] font-black text-amber-500/60 uppercase mb-3 flex items-center gap-2 tracking-widest">
+                    <Scale className="w-3.5 h-3.5" /> Excedentes M³
+                  </p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-3xl font-mono font-bold text-rose-400">{stats.totalExtraM3.toFixed(3)}</p>
-                    <span className="text-xs font-bold text-rose-600 uppercase">m³</span>
+                    <p className="text-4xl font-mono font-black text-amber-400">{stats.surplusM3.toFixed(3)}</p>
+                    <span className="text-xs font-black text-amber-600 uppercase">m³</span>
+                  </div>
+                </div>
+
+                <div className="bg-rose-500/5 border border-rose-500/20 p-5 rounded-3xl relative overflow-hidden">
+                  <AlertTriangle className="absolute -right-4 -bottom-4 w-24 h-24 text-rose-500/10 no-print" />
+                  <p className="text-[10px] font-black text-rose-500/60 uppercase mb-3 flex items-center gap-2 tracking-widest">
+                    <Package className="w-3.5 h-3.5" /> Fora do Pedido M³
+                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-4xl font-mono font-black text-rose-400">{stats.outsideM3.toFixed(3)}</p>
+                    <span className="text-xs font-black text-rose-600 uppercase">m³</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-700 p-5 rounded-3xl relative overflow-hidden">
+                  <Calculator className="absolute -right-4 -bottom-4 w-24 h-24 text-white/5 no-print" />
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-3 flex items-center gap-2 tracking-widest">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-500" /> Total Impacto M³
+                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-4xl font-mono font-black text-white">{stats.totalImpactM3.toFixed(3)}</p>
+                    <span className="text-xs font-black text-slate-500 uppercase">m³</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="p-4 border-b border-slate-800 bg-slate-950/30">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Acuracidade de Itens
+              {/* Tabela de Balanço */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+                <div className="p-5 border-b border-slate-800 bg-slate-950/30">
+                  <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-tighter">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Itens Planejados no Mês
                   </h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-950 text-slate-500 uppercase font-bold border-b border-slate-800">
+                    <thead className="bg-slate-950/80 text-slate-500 uppercase font-black border-b border-slate-800">
                       <tr>
-                        <th className="px-4 py-3">Material</th>
-                        <th className="px-4 py-3 text-center">Solicitado</th>
-                        <th className="px-4 py-3 text-center">Embarcado</th>
-                        <th className="px-4 py-3 text-center">Diferença</th>
-                        <th className="px-4 py-3 text-right">Status</th>
+                        <th className="px-6 py-5">Material Planejado</th>
+                        <th className="px-6 py-5 text-center">Solicitado</th>
+                        <th className="px-6 py-5 text-center">Embarcado</th>
+                        <th className="px-6 py-5 text-center">Divergência</th>
+                        <th className="px-6 py-5 text-right">Impacto M³</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {stats.items.map((item, i) => {
-                        const diff = item.shipped - item.requested;
-                        const status = diff === 0 ? 'CORRETO' : diff > 0 ? 'EXCESSO' : 'FALTA';
-                        const colorClass = diff === 0 ? 'text-emerald-400' : diff > 0 ? 'text-amber-400' : 'text-rose-400';
-                        
+                    <tbody className="divide-y divide-slate-800/50">
+                      {stats.plannedList.map((item, i) => {
+                        const hasSurplus = item.diff > 0;
+                        const impact = hasSurplus ? item.diff * item.unitM3 : 0;
                         return (
-                          <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                            <td className="px-4 py-4 font-bold text-slate-300">{item.name}</td>
-                            <td className="px-4 py-4 text-center font-mono text-slate-500">{item.requested}</td>
-                            <td className="px-4 py-4 text-center font-mono text-white">{item.shipped}</td>
-                            <td className={`px-4 py-4 text-center font-mono font-bold ${colorClass}`}>
-                              {diff > 0 ? `+${diff}` : diff}
+                          <tr key={i} className="hover:bg-slate-800/40 transition-colors group">
+                            <td className="px-6 py-5">
+                              <p className="font-black text-slate-300 uppercase tracking-tight group-hover:text-white transition-colors">{item.name}</p>
+                              <p className="text-[9px] text-slate-600 mt-1 font-mono font-bold uppercase tracking-tighter">Unit: {item.unitM3.toFixed(4)} m³</p>
                             </td>
-                            <td className="px-4 py-4 text-right">
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold ${diff === 0 ? 'bg-emerald-500/10 text-emerald-500' : diff > 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                                {status}
-                              </span>
+                            <td className="px-6 py-5 text-center font-mono text-slate-400 font-bold text-sm">{item.requested}</td>
+                            <td className="px-6 py-5 text-center font-mono text-white font-black text-sm">{item.shipped}</td>
+                            <td className={`px-6 py-5 text-center font-mono font-black text-sm ${item.diff === 0 ? 'text-emerald-500' : hasSurplus ? 'text-amber-400' : 'text-rose-500/50'}`}>
+                              {item.diff > 0 ? `+${item.diff}` : item.diff}
+                            </td>
+                            <td className="px-6 py-5 text-right">
+                              <p className={`font-mono font-black text-sm ${impact > 0 ? 'text-amber-400' : 'text-slate-800'}`}>
+                                {impact > 0 ? impact.toFixed(3) : "0.000"}
+                              </p>
                             </td>
                           </tr>
                         );
                       })}
-                      {stats.items.length === 0 && (
-                        <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-600 italic">Nenhum dado para o período selecionado</td></tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* Seção de Detalhamento de Extras */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-                <div className="p-4 border-b border-slate-800 bg-slate-950/30 flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" /> Detalhamento de Itens Extras
+              {/* Itens Extras */}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+                <div className="p-5 border-b border-slate-800 bg-slate-950/30">
+                  <h3 className="text-sm font-black text-rose-400 flex items-center gap-2 uppercase tracking-tighter">
+                    <AlertTriangle className="w-4 h-4" /> Itens Fora do Pedido (Extras)
                   </h3>
-                  <div className="flex items-center gap-2 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
-                    <Scale className="w-3.5 h-3.5 text-rose-500" />
-                    <span className="text-rose-400 text-[10px] font-bold uppercase tracking-tight">TOTAL: {stats.totalExtraM3.toFixed(3)} M³</span>
-                  </div>
                 </div>
-                
-                <div className="p-4 space-y-3">
-                  {stats.extras.map((ex, i) => (
-                    <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group transition-all">
+                <div className="p-5 grid gap-3">
+                  {stats.outsideList.map((ex, i) => (
+                    <div key={i} className="bg-slate-950/50 p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors uppercase tracking-tight">{ex.desc}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                           <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">QTD: {ex.qtd}</span>
-                           <span className="text-slate-700">|</span>
-                           <span className="text-[10px] text-slate-500 italic">Material Extra</span>
-                        </div>
+                        <p className="text-xs font-black text-rose-300 uppercase tracking-tight">{ex.desc}</p>
+                        <p className="text-[10px] bg-rose-500/10 text-rose-400 px-2.5 py-1 rounded-lg font-mono font-black uppercase inline-block mt-2">Qtde: {ex.real}</p>
                       </div>
-                      
-                      <div className="w-full md:w-auto shrink-0 flex items-center justify-between md:justify-end gap-4 bg-slate-900 p-3 rounded-lg border border-slate-800">
-                        <div className="text-left md:text-right border-r border-slate-800 pr-4">
-                           <p className="text-[9px] font-bold text-slate-500 uppercase mb-0.5">M³ Unit.</p>
-                           <p className="text-xs font-mono font-bold text-slate-400">{(ex.calculatedM3 / (parseFloat(ex.qtd) || 1)).toFixed(5)}</p>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-[9px] font-bold text-rose-500/70 uppercase mb-0.5">Subtotal m³</p>
-                           <p className="text-lg font-mono font-bold text-rose-400">{ex.calculatedM3.toFixed(4)}</p>
-                        </div>
+                      <div className="w-full md:w-auto shrink-0 text-right">
+                         <p className="text-[9px] font-black text-rose-500/50 uppercase mb-1">Impacto M³</p>
+                         <p className="text-xl font-mono font-black text-rose-400 leading-none">{ex.calculatedM3.toFixed(4)}</p>
                       </div>
                     </div>
                   ))}
-                  
-                  {stats.extras.length === 0 && (
-                    <div className="text-center py-10 flex flex-col items-center gap-2 opacity-30">
-                      <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                      <p className="text-xs font-bold text-slate-400 uppercase">Nenhuma divergência detectada.</p>
-                    </div>
-                  )}
+                  {stats.outsideList.length === 0 && <p className="text-center py-10 text-slate-600 font-bold uppercase text-[10px] italic">Nenhum item extra detectado no período</p>}
                 </div>
-              </div>
-              
-              <div className="bg-cyan-500/5 border border-cyan-500/10 p-4 rounded-xl flex items-start gap-3">
-                 <Info className="w-5 h-5 text-cyan-500 shrink-0 mt-0.5" />
-                 <p className="text-[10px] text-cyan-400/80 font-medium italic leading-relaxed">
-                   Os cálculos consideram as dimensões encontradas na descrição do item. Para materiais sem dimensões, o volume deve ser conferido manualmente.
-                 </p>
               </div>
             </div>
           )}
