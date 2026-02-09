@@ -28,7 +28,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
 
   const normalizeName = (name: string) => name.trim().toUpperCase();
 
-  // Função auxiliar para formatar números no padrão brasileiro
+  // Função auxiliar para formatar números no padrão brasileiro (1.234,567)
   const formatNumber = (val: number, decimals: number = 3) => {
     return val.toLocaleString('pt-BR', {
       minimumFractionDigits: decimals,
@@ -148,7 +148,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
     <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans">
       <style>{`
         @media print {
-          /* Força as cores e fundos na impressão */
+          /* Força a fidelidade de cores para bordas e fontes */
           * { 
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important; 
@@ -156,46 +156,50 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
           }
 
           .no-print { display: none !important; }
-          body, html, #root { 
-            height: auto !important; 
-            overflow: visible !important; 
+          
+          /* RESET TOTAL DE FUNDOS PARA BRANCO */
+          body, html, #root, .flex-1, .print-area, main, div, section, table, tr, td, th { 
             background: white !important; 
-            color: black !important; 
-          }
-          .flex-1 { height: auto !important; overflow: visible !important; }
-          .print-area { 
-            position: relative !important;
-            width: 100% !important;
+            background-color: white !important;
+            color: black !important;
+            box-shadow: none !important;
             height: auto !important;
             overflow: visible !important;
-            background: white !important;
-            margin: 0;
-            padding: 0;
           }
+
+          .print-area { 
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* CORES APENAS NOS TEXTOS E BORDAS */
+          .text-emerald-500, .text-emerald-400 { color: #059669 !important; font-weight: 800 !important; } /* Verde */
+          .text-amber-500, .text-amber-400 { color: #d97706 !important; font-weight: 800 !important; }   /* Amarelo/Âmbar */
+          .text-rose-500, .text-rose-400 { color: #dc2626 !important; font-weight: 800 !important; }    /* Vermelho */
+          .text-white, .text-slate-300, .text-slate-200 { color: #000 !important; }
+          .text-slate-500, .text-slate-400, .text-slate-600 { color: #4b5563 !important; }
+
+          /* BORDAS VISÍVEIS */
+          .border, .border-slate-800, .border-slate-700, .border-slate-600 { border: 1px solid #e5e7eb !important; }
+          .border-emerald-500, .border-emerald-500/20 { border: 1px solid #059669 !important; }
+          .border-amber-500, .border-amber-500/20 { border: 1px solid #d97706 !important; }
+          .border-rose-500, .border-rose-500/20 { border: 1px solid #dc2626 !important; }
+
+          /* AJUSTE DE TABELA */
+          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #000 !important; margin-top: 10px; }
+          th, td { border: 1px solid #000 !important; padding: 8px !important; }
+          th { background-color: #f3f4f6 !important; font-weight: bold !important; color: #000 !important; }
+
+          /* REMOVER ROUNDED E SOMBRAS */
+          .rounded-3xl, .rounded-2xl, .rounded-xl, .rounded-lg { border-radius: 0 !important; }
           
-          /* Ajuste de Cores para Impressão (Fundo Branco) */
-          .bg-slate-950, .bg-slate-900, .bg-slate-900/50, .bg-slate-950/30, .bg-slate-950/50, .bg-amber-500/5, .bg-rose-500/5 { background: #fff !important; }
-          
-          /* Cores de Texto Padrão */
-          .text-white, .text-slate-300, .text-slate-400, .text-slate-500 { color: #000 !important; }
-          
-          /* CORES DE DESTAQUE PARA IMPRESSÃO */
-          .text-emerald-500 { color: #059669 !important; font-weight: bold !important; } /* Verde Escuro */
-          .text-amber-400 { color: #d97706 !important; font-weight: bold !important; }   /* Âmbar/Laranja Escuro */
-          .text-rose-500 { color: #dc2626 !important; font-weight: bold !important; }    /* Vermelho Escuro */
-          
-          .border-slate-800, .border-slate-700, .border-amber-500/20, .border-rose-500/20 { border-color: #ddd !important; border-width: 1px !important; }
-          .shadow-2xl, .shadow-xl { box-shadow: none !important; }
-          .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 4px !important; overflow: visible !important; }
-          
-          table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 20px; page-break-inside: auto; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          th, td { border: 1px solid #eee !important; padding: 10px 8px !important; text-align: left; }
-          th { background-color: #f8fafc !important; color: #64748b !important; }
-          
-          .max-w-6xl { max-width: 100% !important; padding: 0 !important; }
           .grid { display: block !important; }
-          .grid > div { margin-bottom: 20px; page-break-inside: avoid; border: 1px solid #eee !important; }
+          .grid > div { margin-bottom: 15px; page-break-inside: avoid; border: 1px solid #ccc !important; padding: 10px !important; }
+          
+          /* Garantir que o impacto total não tenha fundo escuro */
+          .bg-slate-900, .bg-slate-950, .bg-slate-950/30, .bg-slate-950/50, .bg-slate-900/50 { background: white !important; border: 1px solid #ccc !important; }
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -301,7 +305,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-3xl relative overflow-hidden">
                   <TrendingUp className="absolute -right-4 -bottom-4 w-24 h-24 text-amber-500/10 no-print" />
-                  <p className="text-[10px] font-black text-amber-500/60 uppercase mb-3 flex items-center gap-2 tracking-widest">
+                  <p className="text-[10px] font-black text-amber-600 uppercase mb-3 flex items-center gap-2 tracking-widest">
                     <Scale className="w-3.5 h-3.5" /> Excedentes M³
                   </p>
                   <div className="flex items-baseline gap-2">
@@ -312,7 +316,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
 
                 <div className="bg-rose-500/5 border border-rose-500/20 p-5 rounded-3xl relative overflow-hidden">
                   <AlertTriangle className="absolute -right-4 -bottom-4 w-24 h-24 text-rose-500/10 no-print" />
-                  <p className="text-[10px] font-black text-rose-500/60 uppercase mb-3 flex items-center gap-2 tracking-widest">
+                  <p className="text-[10px] font-black text-rose-600 uppercase mb-3 flex items-center gap-2 tracking-widest">
                     <Package className="w-3.5 h-3.5" /> Fora do Pedido M³
                   </p>
                   <div className="flex items-baseline gap-2">
@@ -353,14 +357,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {stats.plannedList.map((item, i) => {
-                        const hasSurplus = item.diff > 1e-6; // Tolerância para flutuantes
+                        const hasSurplus = item.diff > 1e-6; 
                         const hasDeficit = item.diff < -1e-6;
                         const impact = hasSurplus ? item.diff * item.unitM3 : 0;
                         
-                        // Cores sólidas para garantir visibilidade na impressão
-                        let diffColorClass = 'text-emerald-500'; // Verde (Correto)
-                        if (hasSurplus) diffColorClass = 'text-amber-400'; // Amarelo (Excesso)
-                        if (hasDeficit) diffColorClass = 'text-rose-500'; // Vermelho (Falta)
+                        let diffColorClass = 'text-emerald-500'; 
+                        if (hasSurplus) diffColorClass = 'text-amber-500'; 
+                        if (hasDeficit) diffColorClass = 'text-rose-500'; 
 
                         return (
                           <tr key={i} className="hover:bg-slate-800/40 transition-colors group">
@@ -374,7 +377,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                               {item.diff > 0 ? `+${item.diff}` : item.diff}
                             </td>
                             <td className="px-6 py-5 text-right">
-                              <p className={`font-mono font-black text-sm ${impact > 0 ? 'text-amber-400' : 'text-slate-800'}`}>
+                              <p className={`font-mono font-black text-sm ${impact > 0 ? 'text-amber-500' : 'text-slate-800'}`}>
                                 {impact > 0 ? formatNumber(impact) : "0,000"}
                               </p>
                             </td>
@@ -401,7 +404,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                         <p className="text-[10px] bg-rose-500/10 text-rose-500 px-2.5 py-1 rounded-lg font-mono font-black uppercase inline-block mt-2">Qtde: {ex.real}</p>
                       </div>
                       <div className="w-full md:w-auto shrink-0 text-right">
-                         <p className="text-[9px] font-black text-rose-500/50 uppercase mb-1">Impacto M³</p>
+                         <p className="text-[9px] font-black text-rose-500 uppercase mb-1">Impacto M³</p>
                          <p className="text-xl font-mono font-black text-rose-500 leading-none">{formatNumber(ex.calculatedM3, 4)}</p>
                       </div>
                     </div>
