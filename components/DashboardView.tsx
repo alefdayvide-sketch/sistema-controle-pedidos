@@ -28,6 +28,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
 
   const normalizeName = (name: string) => name.trim().toUpperCase();
 
+  // Função auxiliar para formatar números no padrão brasileiro
+  const formatNumber = (val: number, decimals: number = 3) => {
+    return val.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  };
+
   const calculateVolumeFromDesc = (item: ContainerItem): number => {
     if (item.m3) {
       const manualM3 = parseFloat(String(item.m3).replace(',', '.'));
@@ -278,7 +286,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                     <Scale className="w-3.5 h-3.5" /> Excedentes M³
                   </p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-mono font-black text-amber-400">{stats.surplusM3.toFixed(3)}</p>
+                    <p className="text-4xl font-mono font-black text-amber-400">{formatNumber(stats.surplusM3)}</p>
                     <span className="text-xs font-black text-amber-600 uppercase">m³</span>
                   </div>
                 </div>
@@ -289,7 +297,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                     <Package className="w-3.5 h-3.5" /> Fora do Pedido M³
                   </p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-mono font-black text-rose-400">{stats.outsideM3.toFixed(3)}</p>
+                    <p className="text-4xl font-mono font-black text-rose-400">{formatNumber(stats.outsideM3)}</p>
                     <span className="text-xs font-black text-rose-600 uppercase">m³</span>
                   </div>
                 </div>
@@ -300,7 +308,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                     <CheckCircle2 className="w-3.5 h-3.5 text-cyan-500" /> Total Impacto M³
                   </p>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-mono font-black text-white">{stats.totalImpactM3.toFixed(3)}</p>
+                    <p className="text-4xl font-mono font-black text-white">{formatNumber(stats.totalImpactM3)}</p>
                     <span className="text-xs font-black text-slate-500 uppercase">m³</span>
                   </div>
                 </div>
@@ -332,7 +340,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                           <tr key={i} className="hover:bg-slate-800/40 transition-colors group">
                             <td className="px-6 py-5">
                               <p className="font-black text-slate-300 uppercase tracking-tight group-hover:text-white transition-colors">{item.name}</p>
-                              <p className="text-[9px] text-slate-600 mt-1 font-mono font-bold uppercase tracking-tighter">Unit: {item.unitM3.toFixed(4)} m³</p>
+                              <p className="text-[9px] text-slate-600 mt-1 font-mono font-bold uppercase tracking-tighter">Unit: {formatNumber(item.unitM3, 4)} m³</p>
                             </td>
                             <td className="px-6 py-5 text-center font-mono text-slate-400 font-bold text-sm">{item.requested}</td>
                             <td className="px-6 py-5 text-center font-mono text-white font-black text-sm">{item.shipped}</td>
@@ -341,7 +349,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                             </td>
                             <td className="px-6 py-5 text-right">
                               <p className={`font-mono font-black text-sm ${impact > 0 ? 'text-amber-400' : 'text-slate-800'}`}>
-                                {impact > 0 ? impact.toFixed(3) : "0.000"}
+                                {impact > 0 ? formatNumber(impact) : "0,000"}
                               </p>
                             </td>
                           </tr>
@@ -368,7 +376,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                       </div>
                       <div className="w-full md:w-auto shrink-0 text-right">
                          <p className="text-[9px] font-black text-rose-500/50 uppercase mb-1">Impacto M³</p>
-                         <p className="text-xl font-mono font-black text-rose-400 leading-none">{ex.calculatedM3.toFixed(4)}</p>
+                         <p className="text-xl font-mono font-black text-rose-400 leading-none">{formatNumber(ex.calculatedM3, 4)}</p>
                       </div>
                     </div>
                   ))}
