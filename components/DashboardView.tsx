@@ -148,6 +148,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
     <div className="flex flex-col h-screen bg-slate-950 overflow-hidden font-sans">
       <style>{`
         @media print {
+          /* Força as cores e fundos na impressão */
+          * { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            color-adjust: exact !important;
+          }
+
           .no-print { display: none !important; }
           body, html, #root { 
             height: auto !important; 
@@ -162,21 +169,33 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
             height: auto !important;
             overflow: visible !important;
             background: white !important;
-            color: black !important;
             margin: 0;
             padding: 0;
           }
+          
+          /* Ajuste de Cores para Impressão (Fundo Branco) */
           .bg-slate-950, .bg-slate-900, .bg-slate-900/50, .bg-slate-950/30, .bg-slate-950/50, .bg-amber-500/5, .bg-rose-500/5 { background: #fff !important; }
-          .text-white, .text-slate-300, .text-slate-400, .text-slate-500, .text-rose-300, .text-rose-400, .text-amber-400, .text-amber-100 { color: #000 !important; }
-          .border-slate-800, .border-slate-700, .border-amber-500/20, .border-rose-500/20 { border-color: #eee !important; border-width: 1px !important; }
+          
+          /* Cores de Texto Padrão */
+          .text-white, .text-slate-300, .text-slate-400, .text-slate-500 { color: #000 !important; }
+          
+          /* CORES DE DESTAQUE PARA IMPRESSÃO */
+          .text-emerald-500 { color: #059669 !important; font-weight: bold !important; } /* Verde Escuro */
+          .text-amber-400 { color: #d97706 !important; font-weight: bold !important; }   /* Âmbar/Laranja Escuro */
+          .text-rose-500 { color: #dc2626 !important; font-weight: bold !important; }    /* Vermelho Escuro */
+          
+          .border-slate-800, .border-slate-700, .border-amber-500/20, .border-rose-500/20 { border-color: #ddd !important; border-width: 1px !important; }
           .shadow-2xl, .shadow-xl { box-shadow: none !important; }
-          .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 8px !important; overflow: visible !important; }
+          .rounded-3xl, .rounded-2xl, .rounded-xl { border-radius: 4px !important; overflow: visible !important; }
+          
           table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 20px; page-break-inside: auto; }
           tr { page-break-inside: avoid; page-break-after: auto; }
-          th, td { border: 1px solid #ddd !important; padding: 12px 8px !important; color: black !important; text-align: left; }
+          th, td { border: 1px solid #eee !important; padding: 10px 8px !important; text-align: left; }
+          th { background-color: #f8fafc !important; color: #64748b !important; }
+          
           .max-w-6xl { max-width: 100% !important; padding: 0 !important; }
           .grid { display: block !important; }
-          .grid > div { margin-bottom: 15px; page-break-inside: avoid; }
+          .grid > div { margin-bottom: 20px; page-break-inside: avoid; border: 1px solid #eee !important; }
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -334,8 +353,15 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                     </thead>
                     <tbody className="divide-y divide-slate-800/50">
                       {stats.plannedList.map((item, i) => {
-                        const hasSurplus = item.diff > 0;
+                        const hasSurplus = item.diff > 1e-6; // Tolerância para flutuantes
+                        const hasDeficit = item.diff < -1e-6;
                         const impact = hasSurplus ? item.diff * item.unitM3 : 0;
+                        
+                        // Cores sólidas para garantir visibilidade na impressão
+                        let diffColorClass = 'text-emerald-500'; // Verde (Correto)
+                        if (hasSurplus) diffColorClass = 'text-amber-400'; // Amarelo (Excesso)
+                        if (hasDeficit) diffColorClass = 'text-rose-500'; // Vermelho (Falta)
+
                         return (
                           <tr key={i} className="hover:bg-slate-800/40 transition-colors group">
                             <td className="px-6 py-5">
@@ -344,7 +370,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                             </td>
                             <td className="px-6 py-5 text-center font-mono text-slate-400 font-bold text-sm">{item.requested}</td>
                             <td className="px-6 py-5 text-center font-mono text-white font-black text-sm">{item.shipped}</td>
-                            <td className={`px-6 py-5 text-center font-mono font-black text-sm ${item.diff === 0 ? 'text-emerald-500' : hasSurplus ? 'text-amber-400' : 'text-rose-500/50'}`}>
+                            <td className={`px-6 py-5 text-center font-mono font-black text-sm ${diffColorClass}`}>
                               {item.diff > 0 ? `+${item.diff}` : item.diff}
                             </td>
                             <td className="px-6 py-5 text-right">
@@ -363,7 +389,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
               {/* Itens Extras */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
                 <div className="p-5 border-b border-slate-800 bg-slate-950/30">
-                  <h3 className="text-sm font-black text-rose-400 flex items-center gap-2 uppercase tracking-tighter">
+                  <h3 className="text-sm font-black text-rose-500 flex items-center gap-2 uppercase tracking-tighter">
                     <AlertTriangle className="w-4 h-4" /> Itens Fora do Pedido (Extras)
                   </h3>
                 </div>
@@ -371,12 +397,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ containers, onBack }) => 
                   {stats.outsideList.map((ex, i) => (
                     <div key={i} className="bg-slate-950/50 p-5 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-rose-300 uppercase tracking-tight">{ex.desc}</p>
-                        <p className="text-[10px] bg-rose-500/10 text-rose-400 px-2.5 py-1 rounded-lg font-mono font-black uppercase inline-block mt-2">Qtde: {ex.real}</p>
+                        <p className="text-xs font-black text-rose-500 uppercase tracking-tight">{ex.desc}</p>
+                        <p className="text-[10px] bg-rose-500/10 text-rose-500 px-2.5 py-1 rounded-lg font-mono font-black uppercase inline-block mt-2">Qtde: {ex.real}</p>
                       </div>
                       <div className="w-full md:w-auto shrink-0 text-right">
                          <p className="text-[9px] font-black text-rose-500/50 uppercase mb-1">Impacto M³</p>
-                         <p className="text-xl font-mono font-black text-rose-400 leading-none">{formatNumber(ex.calculatedM3, 4)}</p>
+                         <p className="text-xl font-mono font-black text-rose-500 leading-none">{formatNumber(ex.calculatedM3, 4)}</p>
                       </div>
                     </div>
                   ))}
